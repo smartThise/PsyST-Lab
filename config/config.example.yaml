@@ -1,0 +1,24 @@
+# API configuration
+# ------------------------------------------------------------
+# Copy this file to config.yaml and fill in your credentials.
+#   cp config/config.example.yaml config/config.yaml
+# config.yaml is gitignored.
+
+# DMXAPI (OpenAI-compatible) endpoint — same one used by the
+# serial-dependence project. Any OpenAI-compatible /chat/completions
+# endpoint works.
+base_url: "https://www.dmxapi.cn/v1"
+api_key: "YOUR_API_KEY"
+
+# Model under test. Use something cheap for iteration (gpt-4o-mini),
+# then re-run the winning groups on stronger models.
+model: "gpt-4o-mini"
+
+# Generation temperature. Most groups want 0.0 for determinism;
+# the self-generation group (G6) overrides this to 0.8 locally.
+temperature: 0.0
+max_tokens: 64
+
+# Reliability
+max_retries: 5          # exponential backoff on failure / rate limit
+timeout: 60             # seconds per call

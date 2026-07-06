@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PI-Release Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1>PI&#8209;Release</h1>
+    <span class="subtitle">Proactive Interference · single-prompt release study</span>
+  </div>
+  <div class="run-select">
+    <label for="run-select">Run</label>
+    <select id="run-select"><option value="">—</option></select>
+    <button id="refresh" class="ghost" title="Refresh run list">⟳</button>
+  </div>
+</header>
+
+<main>
+  <section id="empty" class="empty-state">
+    <div class="empty-card">
+      <h2>No runs yet</h2>
+      <p>Run the experiment, then refresh:</p>
+      <pre><code>python scripts/run_all.py</code></pre>
+      <p class="muted">Then click ⟳ above.</p>
+    </div>
+  </section>
+
+  <div id="content" class="hidden">
+    <section class="meta-bar">
+      <span id="meta-model" class="chip"></span>
+      <span id="meta-pi" class="chip"></span>
+      <span id="meta-eval" class="chip"></span>
+      <span id="meta-calls" class="chip"></span>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi"><span class="label">Baseline accuracy</span><span id="kpi-baseline" class="value">—</span></div>
+      <div class="kpi"><span class="label">Best RE</span><span id="kpi-best-re" class="value">—</span></div>
+      <div class="kpi"><span class="label">Best group</span><span id="kpi-best-group" class="value">—</span></div>
+      <div class="kpi"><span class="label">Mean CP</span><span id="kpi-cp" class="value">—</span></div>
+    </section>
+
+    <section class="grid">
+      <div class="chart-card span-2">
+        <header><h3>Release Efficiency vs Accuracy</h3><span class="muted">per group</span></header>
+        <canvas id="chart-main" height="120"></canvas>
+      </div>
+      <div class="chart-card">
+        <header><h3>CP &amp; Robustness</h3><span class="muted">collapse check</span></header>
+        <canvas id="chart-cp" height="120"></canvas>
+      </div>
+    </section>
+
+    <section class="table-card">
+      <header><h3>Per-group detail</h3></header>
+      <table id="detail-table">
+        <thead>
+          <tr>
+            <th>ID</th><th>Name</th><th>Accuracy</th><th>RE</th><th>CP</th><th>Rob Δ</th><th>Calls</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="table-card">
+      <header><h3>Per-trial records (latest run)</h3><span class="muted" id="records-count"></span></header>
+      <table id="records-table">
+        <thead>
+          <tr><th>Group</th><th>Trial</th><th>Accuracy</th><th>CP</th><th>Rob Δ</th><th>Calls</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </div>
+</main>
+
+<footer class="muted small">
+  pi-release-exp · <a href="https://arxiv.org/abs/2506.08184" target="_blank" rel="noopener">based on arXiv:2506.08184</a>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

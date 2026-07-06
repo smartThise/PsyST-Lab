@@ -1,0 +1,25 @@
+# API secrets — never commit
+config/config.yaml
+*.key
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Experiment outputs (large, regenerable)
+# Ignore runs/* contents but keep the directory itself for the dashboard.
+runs/*
+!runs/.gitkeep
+
+# OS / editor
+.DS_Store
+**/.DS_Store
+._*
+*.swp
+.idea/
+.vscode/

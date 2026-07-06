@@ -1,0 +1,35 @@
+# Experiment definition
+# ------------------------------------------------------------
+# Defines the PI stress test, which groups to run, and how each
+# group is evaluated. Edit `enabled` to scope a run.
+
+pi_test:
+  n_keys: 3              # number of distinct keys tracked (paper uses up to 46)
+  updates_per_key: 80    # interference load per key (drives PI; baseline acc -> ~0)
+  n_trials: 10           # distinct PI streams per group (reduces variance)
+  seed: 42               # base RNG seed (each trial derives its own)
+
+eval:
+  k_repeats: 5           # API calls per (group, trial) -> averaged accuracy
+  measure_cp: true       # Context Preservation probe (unrelated prior fact)
+  measure_robustness: true  # delete 1 char from injection, re-run, check RE delta
+
+# Group enable flags. Disable groups to scope down a quick test run.
+# IDs match think1.md (G0-G7 single-class, S1-S5 stacks).
+groups:
+  - { id: G0, name: "baseline",            enabled: true }
+  - { id: G1, name: "semantic-forget",     enabled: true }
+  - { id: G2, name: "mock-qa-reset",       enabled: true }   # paper's winner
+  - { id: G3, name: "syntactic-cliff",     enabled: true }
+  - { id: G4, name: "glitch-tokens",       enabled: true }   # biggest unknown
+  - { id: G5, name: "unicode-bytes",       enabled: false }  # enable after G4
+  - { id: G6, name: "self-generation",     enabled: true }
+  - { id: G7, name: "query-engineering",   enabled: true }
+  - { id: S3, name: "stack: mock+cliff+glitch", enabled: true }
+  - { id: S5, name: "stack: full firepower",     enabled: false }  # expensive
+
+# Self-generation group needs higher temperature
+group_overrides:
+  G6:
+    temperature: 0.8
+    max_tokens: 128     # needs room to emit disruption tokens + answer
