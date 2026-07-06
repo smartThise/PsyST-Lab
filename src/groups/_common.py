@@ -103,13 +103,15 @@ def engineered_query(test: PITest) -> str:
     )
 
 
-def hackreset_injection(test: PITest) -> str:
+def hackreset_injection(test: PITest, values: dict | None = None) -> str:
     """Paper's get_fake_conversation (hackreset): fake prior Q&A whose assistant
-    turn contains the CORRECT current values. NOT a fair release technique —
-    it primes the model with the answers. Reproduced for ablation/comparison.
+    turn states values for each key. Defaults to the CORRECT current values
+    (test.targets); pass test.first_values (or any other dict) to inject WRONG
+    values — used by G9 as a control for G8.
     """
+    vals = values if values is not None else test.targets
     current_response = "\n".join(
-        f"The current value of {k} is {v}." for k, v in test.targets.items()
+        f"The current value of {k} is {v}." for k, v in vals.items()
     )
     return (
         '{\n"role": "user",\n"content": "'

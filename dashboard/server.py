@@ -275,6 +275,8 @@ def _launch(body: dict) -> dict:
     if _find_runner_pids():
         return {"launched": False, "error": "已有 run 在跑,请等它结束"}
 
+    _groups_mod.discover()  # pick up any group file added since startup
+
     # resolve profile -> write into config.yaml
     profiles = _load_profiles()
     pname = body.get("profile")
@@ -359,7 +361,8 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/api/status":
             self._send_json(200, _status())
         elif p == "/api/groups":
-            self._send_json(200, {"groups": GROUP_INFO})
+            _groups_mod.discover()  # re-scan src/groups/ for newly added files
+            self._send_json(200, {"groups": _groups_mod.GROUP_META})
         elif p == "/api/profiles":
             profiles = [{**p, "api_key": _mask_key(p.get("api_key"))}
                         for p in _load_profiles()]

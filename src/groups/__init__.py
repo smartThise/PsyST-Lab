@@ -28,9 +28,15 @@ from pi_test import PITest  # noqa: E402
 REGISTRY: dict[str, callable] = {}
 GROUP_META: list[dict] = []
 _OVERRIDES: dict[str, dict] = {}
+KNOWN_GROUPS: list[str] = []
 
 
-def _discover() -> None:
+def discover() -> None:
+    """Re-scan src/groups/ for modules. Safe to call repeatedly (clears first),
+    so the dashboard can pick up newly dropped group files without a restart."""
+    REGISTRY.clear()
+    GROUP_META.clear()
+    _OVERRIDES.clear()
     for m in pkgutil.iter_modules(__path__):
         name = m.name
         if name.startswith("_"):
@@ -47,16 +53,13 @@ def _discover() -> None:
         })
         if hasattr(mod, "OVERRIDES"):
             _OVERRIDES[gid] = dict(mod.OVERRIDES)
-    # deterministic order: G0..G9, then S*, then anything else
-    def _key(g):
-        i = g["id"]
-        return (1 if i.startswith("S") else 0, i)
-    GROUP_META.sort(key=_key)
+    # deterministic order: G* first, then S*
+    GROUP_META.sort(key=lambda g: (1 if g["id"].startswith("S") else 0, g["id"]))
+    KNOWN_GROUPS.clear()
+    KNOWN_GROUPS.extend(g["id"] for g in GROUP_META)
 
 
-_discover()
-
-KNOWN_GROUPS = [g["id"] for g in GROUP_META]
+discover()
 
 
 def build_message(group_id: str, test: PITest, seed: int = 0) -> str:
