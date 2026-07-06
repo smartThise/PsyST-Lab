@@ -69,15 +69,23 @@ def generate(n_keys: int = 3, updates_per_key: int = 80, seed: int | None = None
     per_key_values = {k: rng.sample(cats[k], updates_per_key) for k in chosen}
 
     # build one record per update, then pseudo-randomize their stream order.
-    # values are assigned in per-key update order; the LAST value per key is the target.
     records: list[dict] = []
     for k in chosen:
         for i in range(updates_per_key):
             records.append({"key": k, "value": per_key_values[k][i], "idx": i + 1})
     updates = _pseudo_randomize(records, rng)
 
-    targets = {k: per_key_values[k][-1] for k in chosen}
-    first_values = {k: per_key_values[k][0] for k in chosen}
+    # CRITICAL: "current value" = the value of each key's LAST occurrence in
+    # the SHUFFLED stream (stream order IS the temporal order the model sees).
+    # per_key_values[k][-1] would be the highest sample-index, which after
+    # shuffling lands at a random position — NOT the positional-last.
+    targets: dict[str, str] = {}
+    first_values: dict[str, str] = {}
+    for u in updates:
+        k = u["key"]
+        if k not in first_values:
+            first_values[k] = u["value"]
+        targets[k] = u["value"]  # last occurrence in stream order wins
 
     # format stream (paper: f"{key}: {item}; " concatenated, trailing "; ")
     stream_text = "".join(f"{u['key']}: {u['value']}; " for u in updates)
