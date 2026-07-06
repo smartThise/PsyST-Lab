@@ -222,6 +222,7 @@ def _seed_profiles_from_config() -> None:
         name = parts[-2] if len(parts) >= 2 else m.group(1)
     _save_profiles([{
         "name": name, "base_url": base_url, "api_key": api_key, "model": model,
+        "extra_body": cfg.get("extra_body") or {},
     }])
 
 
@@ -239,6 +240,11 @@ def _apply_profile_to_config(profile: dict) -> None:
     data["base_url"] = profile["base_url"]
     data["api_key"] = profile["api_key"]
     data["model"] = profile["model"]
+    eb = profile.get("extra_body")
+    if eb:
+        data["extra_body"] = eb
+    else:
+        data.pop("extra_body", None)
     CONFIG_YAML.write_text(
         yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
@@ -366,11 +372,25 @@ class Handler(BaseHTTPRequestHandler):
                 return
             profiles = _load_profiles()
             profiles = [pp for pp in profiles if pp.get("name") != name]  # replace if exists
+            # parse optional extra_body (YAML string -> dict), e.g. "thinking:\n  type: disabled"
+            extra_yaml = (body.get("extra_body") or "").strip()
+            extra_body = {}
+            if extra_yaml:
+                try:
+                    parsed = yaml.safe_load(extra_yaml)
+                except Exception as e:
+                    self._send_json(400, {"ok": False, "error": f"额外参数 YAML 解析失败:{e}"})
+                    return
+                if not isinstance(parsed, dict):
+                    self._send_json(400, {"ok": False, "error": "额外参数必须是 YAML dict(如 thinking:\\n  type: disabled)"})
+                    return
+                extra_body = parsed
             profiles.append({
                 "name": name,
                 "base_url": body["base_url"].strip(),
                 "api_key": body["api_key"].strip(),
                 "model": (body.get("model") or "").strip(),
+                "extra_body": extra_body,
             })
             _save_profiles(profiles)
             self._send_json(200, {"ok": True, "name": name})

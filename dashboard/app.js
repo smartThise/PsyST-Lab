@@ -216,7 +216,8 @@ async function renderSettingsProfiles() {
       </div>
       <div class="profile-detail"><span class="muted">base_url</span><code>${p.base_url}</code></div>
       <div class="profile-detail"><span class="muted">model</span><code>${p.model}</code></div>
-      <div class="profile-detail"><span class="muted">api_key</span><code>${p.api_key}</code></div>`;
+      <div class="profile-detail"><span class="muted">api_key</span><code>${p.api_key}</code></div>
+      ${fmtExtra(p.extra_body) ? `<div class="profile-detail"><span class="muted">额外参数</span><code>${fmtExtra(p.extra_body)}</code></div>` : ""}`;
     card.querySelector("[data-del]").onclick = async () => {
       await fetch(`/api/profiles?name=${encodeURIComponent(p.name)}`, {method:"DELETE"});
       $("p-msg").textContent = `已删除 ${p.name}`;
@@ -232,6 +233,7 @@ $("p-save").onclick = async () => {
     base_url: $("p-baseurl").value.trim(),
     api_key: $("p-apikey").value.trim(),
     model: $("p-model").value.trim(),
+    extra_body: $("p-extra").value,
   };
   if (!body.name || !body.base_url || !body.api_key) {
     $("p-msg").textContent = "name / base_url / api_key 不能为空"; return;
@@ -240,9 +242,23 @@ $("p-save").onclick = async () => {
   try {
     const r = await fetchJSON("/api/profiles", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
     $("p-msg").textContent = r.ok ? `已保存「${r.name}」` : (`失败:${r.error}`);
-    if (r.ok) { $("p-name").value = $("p-baseurl").value = $("p-apikey").value = $("p-model").value = ""; renderSettingsProfiles(); }
+    if (r.ok) { $("p-name").value = $("p-baseurl").value = $("p-apikey").value = $("p-model").value = $("p-extra").value = ""; renderSettingsProfiles(); }
   } catch (e) { $("p-msg").textContent = `错误:${e.message}`; }
 };
+
+function fmtExtra(eb) {
+  if (!eb || typeof eb !== "object" || Object.keys(eb).length === 0) return null;
+  // render nested dict as "key: sub: val" style lines
+  const lines = [];
+  for (const [k, v] of Object.entries(eb)) {
+    if (v && typeof v === "object") {
+      for (const [k2, v2] of Object.entries(v)) lines.push(`${k}.${k2}: ${v2}`);
+    } else {
+      lines.push(`${k}: ${v}`);
+    }
+  }
+  return lines.join(" · ");
+}
 
 // ====================== 启动 ======================
 let groupInfo = [];

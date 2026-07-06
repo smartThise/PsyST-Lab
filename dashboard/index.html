@@ -121,6 +121,10 @@
         <label>api_key<input id="p-apikey" type="password" placeholder="sk-..."></label>
         <label>model<input id="p-model" type="text" placeholder="deepseek-chat"></label>
       </div>
+      <label class="form-full">
+        <span>额外参数(YAML,可选)—— 例如 DeepSeek 关推理</span>
+        <textarea id="p-extra" rows="3" placeholder="thinking:&#10;  type: disabled"></textarea>
+      </label>
       <div class="form-actions">
         <button id="p-save" class="primary">保存</button>
         <span id="p-msg" class="muted small"></span>
