@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PI 释放实验 · 仪表盘</title>
+<title>PI 释放实验 · 控制台</title>
 <link rel="stylesheet" href="/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
@@ -11,79 +11,112 @@
 <header class="topbar">
   <div class="brand">
     <h1>PI 释放实验</h1>
-    <span class="subtitle">单 prompt 释放前涉干扰 · 基于 <a style="color:inherit" href="https://arxiv.org/abs/2506.08184" target="_blank" rel="noopener">arXiv:2506.08184</a></span>
+    <span class="subtitle">基于 <a style="color:inherit" href="https://arxiv.org/abs/2506.08184" target="_blank" rel="noopener">arXiv:2506.08184</a></span>
   </div>
-  <div class="run-select">
-    <label for="run-select">运行记录</label>
-    <select id="run-select"><option value="">—</option></select>
-    <button id="refresh" class="ghost" title="刷新运行列表">⟳</button>
-  </div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="live">实时</button>
+    <button class="tab" data-tab="results">结果</button>
+    <button class="tab" data-tab="compare">对比</button>
+    <button class="tab" data-tab="launch">启动</button>
+  </nav>
+  <div class="run-status-pill" id="status-pill"><span class="dot"></span><span id="status-text">检查中…</span></div>
 </header>
 
 <main>
-  <section id="empty" class="empty-state">
-    <div class="empty-card">
-      <h2>暂无运行记录</h2>
-      <p>先跑一次实验,然后点上面的 ⟳ 刷新:</p>
-      <pre><code>python scripts/run_all.py</code></pre>
-      <p class="muted small">需要先在 config/config.yaml 配好 api_key</p>
+  <!-- ============ 实时 ============ -->
+  <section id="tab-live" class="tab-panel active">
+    <div class="kpi-row">
+      <div class="kpi"><span class="label">状态</span><span id="live-state" class="value">—</span></div>
+      <div class="kpi"><span class="label">当前组</span><span id="live-group" class="value">—</span></div>
+      <div class="kpi"><span class="label">进度</span><span id="live-progress" class="value">—</span></div>
+      <div class="kpi"><span class="label">最新 run</span><span id="live-tag" class="value">—</span></div>
+    </div>
+    <div class="chart-card">
+      <header><h3>实时日志</h3><span class="muted small" id="live-autorefresh">每 3s 自动刷新</span></header>
+      <pre id="live-log" class="log-viewer">（等待运行…）</pre>
     </div>
   </section>
 
-  <div id="content" class="hidden">
-    <section class="meta-bar">
-      <span id="meta-model" class="chip"></span>
-      <span id="meta-pi" class="chip"></span>
-      <span id="meta-eval" class="chip"></span>
-      <span id="meta-calls" class="chip"></span>
-    </section>
-
-    <section class="kpis">
-      <div class="kpi"><span class="label">基线准确率(G0)</span><span id="kpi-baseline" class="value">—</span></div>
-      <div class="kpi accent"><span class="label">最佳释放效率 RE</span><span id="kpi-best-re" class="value">—</span></div>
-      <div class="kpi"><span class="label">最佳组别</span><span id="kpi-best-group" class="value">—</span></div>
-      <div class="kpi"><span class="label">平均上下文保全率</span><span id="kpi-cp" class="value">—</span></div>
-    </section>
-
-    <section class="grid">
-      <div class="chart-card">
-        <header><h3>释放效率 vs 准确率(按组别)</h3><span class="muted small">条形越高越好</span></header>
-        <canvas id="chart-main" height="120"></canvas>
+  <!-- ============ 结果 ============ -->
+  <section id="tab-results" class="tab-panel">
+    <div class="empty-state" id="results-empty">
+      <div class="empty-card">
+        <h2>暂无运行记录</h2>
+        <p>先在「启动」标签配置并运行一次实验。</p>
       </div>
-      <div class="chart-card">
-        <header><h3>上下文保全 & 鲁棒性</h3><span class="muted small">区分"释放"与"坠毁"</span></header>
-        <canvas id="chart-cp" height="120"></canvas>
+    </div>
+    <div id="results-content" class="hidden">
+      <div class="meta-bar">
+        <select id="run-select"></select>
+        <span id="meta-model" class="chip"></span>
+        <span id="meta-pi" class="chip"></span>
+        <span id="meta-calls" class="chip"></span>
       </div>
-    </section>
+      <section class="kpis">
+        <div class="kpi"><span class="label">基线准确率(G0)</span><span id="kpi-baseline" class="value">—</span></div>
+        <div class="kpi accent"><span class="label">最佳释放效率 RE</span><span id="kpi-best-re" class="value">—</span></div>
+        <div class="kpi"><span class="label">最佳组别</span><span id="kpi-best-group" class="value">—</span></div>
+        <div class="kpi"><span class="label">平均 CP</span><span id="kpi-cp" class="value">—</span></div>
+      </section>
+      <section class="grid">
+        <div class="chart-card">
+          <header><h3>释放效率 vs 准确率</h3></header>
+          <canvas id="chart-main" height="120"></canvas>
+        </div>
+        <div class="chart-card">
+          <header><h3>上下文保全 & 鲁棒性</h3></header>
+          <canvas id="chart-cp" height="120"></canvas>
+        </div>
+      </section>
+      <section class="table-card">
+        <header><h3>各组详情</h3></header>
+        <table id="detail-table">
+          <thead><tr><th>编号</th><th>名称</th><th>准确率</th><th>RE</th><th>CP</th><th>鲁棒性Δ</th><th>调用数</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+  </section>
 
-    <section class="table-card">
-      <header><h3>各组详情</h3><span class="muted small">RE 越高越好;CP 越低越接近崩溃</span></header>
-      <table id="detail-table">
-        <thead>
-          <tr>
-            <th>编号</th><th>名称</th><th>准确率</th><th>释放效率 RE</th><th>上下文保全 CP</th><th>鲁棒性Δ</th><th>调用数</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
+  <!-- ============ 对比 ============ -->
+  <section id="tab-compare" class="tab-panel">
+    <div class="chart-card">
+      <header><h3>选择要对比的 run（多选）</h3><span class="muted small">勾选后自动生成横向对比表</span></header>
+      <div id="compare-picker" class="compare-picker"></div>
+    </div>
+    <div class="chart-card">
+      <header><h3>横向对比（每格 = 该 run 该组的 accuracy）</h3>
+             <span class="muted small"><label><input type="checkbox" id="compare-re"> 显示 RE(相对各自基线)</label></span></header>
+      <div class="table-wrap">
+        <table id="compare-table" class="compare-table"></table>
+      </div>
+    </div>
+  </section>
 
-    <section class="table-card">
-      <header><h3>每试次原始记录</h3><span class="muted small" id="records-count"></span></header>
-      <table id="records-table">
-        <thead>
-          <tr><th>组别</th><th>试次</th><th>准确率</th><th>CP</th><th>鲁棒性Δ</th><th>调用数</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-  </div>
+  <!-- ============ 启动 ============ -->
+  <section id="tab-launch" class="tab-panel">
+    <div class="chart-card launch-card">
+      <header><h3>配置并启动一次运行</h3><span id="launch-warn" class="muted small"></span></header>
+      <div class="form-grid">
+        <label>模型<input id="f-model" type="text" placeholder="deepseek-chat" value="deepseek-chat"></label>
+        <label>keys<input id="f-nkeys" type="number" value="46"></label>
+        <label>updates/key<input id="f-updates" type="number" value="4"></label>
+        <label>试次数<input id="f-trials" type="number" value="10"></label>
+        <label>k_repeats<input id="f-krepeats" type="number" value="3"></label>
+      </div>
+      <div class="form-groups">
+        <span class="muted small">选择组别(G0 会自动加入作为基线):</span>
+        <div id="launch-groups" class="group-checkboxes"></div>
+      </div>
+      <div class="form-actions">
+        <button id="launch-btn" class="primary">启动运行</button>
+        <span id="launch-msg" class="muted small"></span>
+      </div>
+    </div>
+  </section>
 </main>
 
-<footer class="small">
-  pi-release-exp · 前涉干扰(PI)释放研究框架 · 数据来自本地 runs/ 目录
-</footer>
-
+<footer class="small">pi-release-exp · 数据来自本地 runs/ 目录 · 日志 /tmp/pi_run.log</footer>
 <script src="/app.js"></script>
 </body>
 </html>

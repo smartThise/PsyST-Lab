@@ -1,33 +1,46 @@
 #!/usr/bin/env python3
-"""Zero-dependency dashboard server.
+"""Zero-dependency dashboard + control server.
 
-Serves the experiment results to a local web dashboard.
-Uses only the Python standard library (http.server) — no Flask/FastAPI needed.
+Stdlib only (http.server). Serves results, live run status, cross-run
+comparison, and a launch endpoint to start runs from the UI.
 
     python dashboard/server.py
-    # then open http://localhost:8765
+    # open http://localhost:8765
 
 Routes:
-    GET /                         -> dashboard UI (index.html)
-    GET /style.css /app.js        -> static assets
-    GET /api/runs                 -> list of all runs (metadata)
-    GET /api/run/<tag>            -> full summary.json for a run
-    GET /api/run/<tag>/results    -> raw per-call records (jsonl -> json array)
+    GET  /                           UI (index.html)
+    GET  /style.css /app.js          static
+    GET  /api/runs                   list run metadata
+    GET  /api/run/<tag>              summary.json
+    GET  /api/run/<tag>/results      per-call records (jsonl -> array)
+    GET  /api/status                 live: running process, log tail, progress
+    GET  /api/compare?tags=a,b,...   cross-run group metrics
+    GET  /api/groups                 known group IDs (for launch form)
+    POST /api/launch                 launch a run {model, groups, n_keys, ...}
 """
 from __future__ import annotations
 
 import json
+import os
+import re
+import subprocess
 import sys
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNS_DIR = ROOT / "runs"
 DASH_DIR = Path(__file__).resolve().parent
+LOG_FILE = Path("/tmp/pi_run.log")
 HOST, PORT = "127.0.0.1", 8765
 
+# groups the launch form can pick from (must match src/groups.py REGISTRY)
+KNOWN_GROUPS = ["G0", "G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "S3", "S5"]
+
+
+# ----------------------------- data helpers -----------------------------
 
 def _list_runs() -> list[dict]:
     out = []
@@ -49,6 +62,7 @@ def _list_runs() -> list[dict]:
             "baseline_acc": data.get("baseline_acc"),
             "n_groups": len(data.get("groups", [])),
             "n_calls": sum(g.get("n_calls", 0) for g in data.get("groups", [])),
+            "pi_test": data.get("pi_test", {}),
         })
     return out
 
@@ -79,6 +93,119 @@ def _load_results(tag: str, limit: int = 2000) -> list[dict]:
     return rows
 
 
+# ----------------------------- live status -----------------------------
+
+def _find_runner_pids() -> list[str]:
+    try:
+        out = subprocess.run(
+            ["pgrep", "-f", "run_all.py"], capture_output=True, text=True, timeout=2
+        ).stdout.strip()
+        return [p for p in out.split() if p]
+    except Exception:
+        return []
+
+
+def _status() -> dict:
+    pids = _find_runner_pids()
+    running = bool(pids)
+
+    log_tail = ""
+    if LOG_FILE.exists():
+        try:
+            lines = LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
+            log_tail = "\n".join(lines[-40:])
+        except Exception:
+            pass
+
+    # latest run dir + its record count
+    latest_tag, records, total = None, 0, None
+    if RUNS_DIR.exists():
+        subs = [d for d in RUNS_DIR.iterdir() if d.is_dir()]
+        if subs:
+            ld = max(subs, key=lambda d: d.stat().st_mtime)
+            latest_tag = ld.name
+            rf = ld / "results.jsonl"
+            if rf.exists():
+                records = sum(1 for _ in open(rf, "r", encoding="utf-8"))
+            # planned total from the latest run's run_config.json (reflects overrides + filters)
+            try:
+                rc = json.loads((ld / "run_config.json").read_text(encoding="utf-8"))
+                total = rc.get("planned_total")
+            except Exception:
+                pass
+
+    # current group from log
+    current_group = None
+    for line in reversed(log_tail.splitlines()):
+        m = re.search(r"=== Group (\S+)", line)
+        if m:
+            current_group = m.group(1).split("(")[0].strip()
+            break
+
+    return {
+        "running": running,
+        "pids": pids,
+        "current_group": current_group,
+        "latest_run": latest_tag,
+        "records_done": records,
+        "records_total": total,
+        "log_tail": log_tail,
+    }
+
+
+# ----------------------------- compare -----------------------------
+
+def _compare(tags: list[str]) -> dict:
+    out = {}
+    for tag in tags:
+        s = _load_summary(tag)
+        if s is None:
+            continue
+        out[tag] = {
+            "tag": tag,
+            "model": s.get("model"),
+            "baseline_acc": s.get("baseline_acc"),
+            "pi_test": s.get("pi_test", {}),
+            "groups": {g["id"]: g for g in s.get("groups", [])},
+        }
+    return out
+
+
+# ----------------------------- launch -----------------------------
+
+def _launch(body: dict) -> dict:
+    if _find_runner_pids():
+        return {"launched": False, "error": "a run is already running; wait for it to finish"}
+    groups = [g for g in body.get("groups", []) if g in KNOWN_GROUPS]
+    if not groups:
+        return {"launched": False, "error": "no valid groups selected"}
+
+    py = str(ROOT / ".venv" / "bin" / "python")
+    if not Path(py).exists():
+        py = sys.executable
+    args = [py, str(ROOT / "scripts" / "run_all.py"), "--groups"] + groups
+    if body.get("model"):
+        args += ["--model", str(body["model"])]
+    for key, cli in [("n_keys", "--n-keys"), ("updates_per_key", "--updates"),
+                     ("n_trials", "--trials"), ("k_repeats", "--k-repeats")]:
+        v = body.get(key)
+        if v is not None and v != "":
+            try:
+                args += [cli, str(int(v))]
+            except (ValueError, TypeError):
+                pass
+
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    log_fp = open(LOG_FILE, "w")
+    subprocess.Popen(
+        args, cwd=str(ROOT), stdout=log_fp, stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    return {"launched": True, "args": args, "groups": groups}
+
+
+# ----------------------------- handler -----------------------------
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code: int, body: bytes, ctype: str):
         self.send_response(code)
@@ -99,39 +226,53 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, path.read_bytes(), ctype)
 
     def do_GET(self):  # noqa: N802
-        parsed = urlparse(self.path)
-        path = parsed.path
+        p = urlparse(self.path).path
+        qs = parse_qs(urlparse(self.path).query)
 
-        if path == "/" or path == "/index.html":
+        if p in ("/", "/index.html"):
             self._send_file(DASH_DIR / "index.html", "text/html; charset=utf-8")
-        elif path == "/style.css":
+        elif p == "/style.css":
             self._send_file(DASH_DIR / "style.css", "text/css; charset=utf-8")
-        elif path == "/app.js":
+        elif p == "/app.js":
             self._send_file(DASH_DIR / "app.js", "application/javascript; charset=utf-8")
-        elif path == "/api/runs":
+        elif p == "/api/runs":
             self._send_json(200, _list_runs())
-        elif path.startswith("/api/run/"):
-            parts = path.rstrip("/").split("/")
-            # /api/run/<tag> or /api/run/<tag>/results
+        elif p == "/api/status":
+            self._send_json(200, _status())
+        elif p == "/api/groups":
+            self._send_json(200, {"groups": KNOWN_GROUPS})
+        elif p == "/api/compare":
+            tags = [t for t in qs.get("tags", [""])[0].split(",") if t]
+            self._send_json(200, _compare(tags))
+        elif p.startswith("/api/run/"):
+            parts = p.rstrip("/").split("/")
             tag = parts[3] if len(parts) > 3 else ""
             if len(parts) >= 5 and parts[4] == "results":
                 self._send_json(200, _load_results(tag))
             else:
                 s = _load_summary(tag)
-                if s is None:
-                    self._send_json(404, {"error": "run not found"})
-                else:
-                    self._send_json(200, s)
+                self._send_json(200, s if s else {"error": "run not found"})
         else:
             self._send(404, b"Not found", "text/plain")
 
-    def log_message(self, *args):  # silence default logging
+    def do_POST(self):  # noqa: N802
+        p = urlparse(self.path).path
+        if p == "/api/launch":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                body = json.loads(self.rfile.read(length) or "{}")
+            except Exception:
+                body = {}
+            self._send_json(200, _launch(body))
+        else:
+            self._send(404, b"Not found", "text/plain")
+
+    def log_message(self, *args):
         pass
 
 
 def main(open_browser: bool = True):
-    if not RUNS_DIR.exists():
-        RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
     n = len(_list_runs())
     print(f"[dashboard] {n} run(s) found under {RUNS_DIR}", file=sys.stderr)
     url = f"http://{HOST}:{PORT}"

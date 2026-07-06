@@ -11,8 +11,8 @@
 
 pi_test:
   n_keys: 46             # paper standard (test1_updates: n_tracked_keys=[46])
-  updates_per_key: 97    # paper collapse-zone point (sweep: 2,3,4,6,8,12,17,24,34,48,68,97,139,197,281,400)
-  n_trials: 5            # distinct PI streams per group (reduced from 10 for runtime)
+  updates_per_key: 4     # light load — baseline ~0.22, leaves headroom to see release effects
+  n_trials: 10           # distinct PI streams per group (small prompt -> can afford more)
   seed: 42               # base RNG seed (each trial derives its own)
 
 eval:
@@ -28,8 +28,9 @@ groups:
   - { id: G2, name: "mock-qa-reset",       enabled: true }   # paper's winner
   - { id: G3, name: "syntactic-cliff",     enabled: true }
   - { id: G4, name: "glitch-tokens",       enabled: true }   # biggest unknown
-  - { id: G5, name: "unicode-bytes",       enabled: false }  # enable after G4
+  - { id: G5, name: "unicode-bytes",       enabled: true }
   - { id: G6, name: "self-generation",     enabled: true }
   - { id: G7, name: "query-engineering",   enabled: true }
+  - { id: G8, name: "hackreset (answer-inject)", enabled: true }  # paper's get_fake_conversation
   - { id: S3, name: "stack: mock+cliff+glitch", enabled: true }
   - { id: S5, name: "stack: full firepower",     enabled: true }

@@ -172,6 +172,33 @@ def s5(test: PITest, seed: int = 0) -> str:
     return _assemble(test, injection=injection, query=_self_gen_query(test))
 
 
+def _hackreset_injection(test: PITest) -> str:
+    """Paper's get_fake_conversation (hackreset): a fake prior Q&A turn whose
+    assistant response contains the CORRECT current values.
+
+    NOT a fair release technique — it primes the model with the answers.
+    Reproduced here to test whether the paper's 'Mock-QA works' result was
+    driven by this answer injection.
+    """
+    current_response = "\n".join(
+        f"The current value of {k} is {v}." for k, v in test.targets.items()
+    )
+    return (
+        '{\n"role": "user",\n"content": "'
+        + build_base_query(test.keys)
+        + '"\n},\n{\n"role": "assistant",\n"content": "Okay, Here are the current '
+        + "values of the specified keys:\\n\\n"
+        + current_response
+        + '"\n},\n{\n"role": "user",\n"content": "Please confirm the current values."'
+        + "\n}"
+    )
+
+
+def g8(test: PITest) -> str:
+    """G8 hackreset: paper's answer-injecting fake prior Q&A (get_fake_conversation)."""
+    return _assemble(test, injection=_hackreset_injection(test))
+
+
 # ---------- registry ----------
 
 REGISTRY: dict[str, callable] = {
@@ -183,6 +210,7 @@ REGISTRY: dict[str, callable] = {
     "G5": g5,
     "G6": g6,
     "G7": g7,
+    "G8": g8,
     "S3": s3,
     "S5": s5,
 }

@@ -99,9 +99,19 @@ def _run_trial(client, group_id, test, k_repeats, measure_cp, measure_robust,
     return rec
 
 
-def run(enabled_only: bool = True, group_filter: list[str] | None = None) -> str:
+def run(enabled_only: bool = True, group_filter: list[str] | None = None,
+        overrides: dict | None = None) -> str:
     cfg = load_config()
     exp = load_experiment()
+    overrides = overrides or {}
+    # runtime overrides (from CLI / dashboard launch panel)
+    if overrides.get("model"):
+        cfg["model"] = overrides["model"]
+    for k in ("n_keys", "updates_per_key", "n_trials"):
+        if k in overrides:
+            exp["pi_test"][k] = overrides[k]
+    if "k_repeats" in overrides:
+        exp["eval"]["k_repeats"] = overrides["k_repeats"]
 
     if cfg.get("api_key", "") in ("", "YOUR_API_KEY"):
         print("[WARN] api_key not set in config/config.yaml — calls will fail", file=sys.stderr)
@@ -125,7 +135,9 @@ def run(enabled_only: bool = True, group_filter: list[str] | None = None) -> str
     tag = make_run_tag(cfg["model"])
     out = run_dir(tag)
     save_json(out / "run_config.json", {"api": {k: v for k, v in cfg.items() if k != "api_key"},
-                                       "experiment": exp, "tag": tag})
+                                       "experiment": exp, "tag": tag,
+                                       "planned_groups": [g["id"] for g in group_defs],
+                                       "planned_total": len(group_defs) * int(pi_cfg.get("n_trials", 10))})
     results_path = out / "results.jsonl"
     results_path.write_text("", encoding="utf-8")  # truncate
 
