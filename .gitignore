@@ -1,5 +1,6 @@
 # API secrets — never commit
 config/config.yaml
+config/api_profiles.yaml
 *.key
 .env
 

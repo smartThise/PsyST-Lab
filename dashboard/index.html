@@ -18,6 +18,7 @@
     <button class="tab" data-tab="results">结果</button>
     <button class="tab" data-tab="compare">对比</button>
     <button class="tab" data-tab="launch">启动</button>
+    <button class="tab" data-tab="settings">设置</button>
   </nav>
   <div class="run-status-pill" id="status-pill"><span class="dot"></span><span id="status-text">检查中…</span></div>
 </header>
@@ -32,7 +33,7 @@
       <div class="kpi"><span class="label">最新 run</span><span id="live-tag" class="value">—</span></div>
     </div>
     <div class="chart-card">
-      <header><h3>实时日志</h3><span class="muted small" id="live-autorefresh">每 3s 自动刷新</span></header>
+      <header><h3>实时日志</h3><span class="muted small">每 3s 自动刷新</span></header>
       <pre id="live-log" class="log-viewer">（等待运行…）</pre>
     </div>
   </section>
@@ -40,10 +41,7 @@
   <!-- ============ 结果 ============ -->
   <section id="tab-results" class="tab-panel">
     <div class="empty-state" id="results-empty">
-      <div class="empty-card">
-        <h2>暂无运行记录</h2>
-        <p>先在「启动」标签配置并运行一次实验。</p>
-      </div>
+      <div class="empty-card"><h2>暂无运行记录</h2><p>先在「启动」标签配置并运行一次实验。</p></div>
     </div>
     <div id="results-content" class="hidden">
       <div class="meta-bar">
@@ -54,19 +52,13 @@
       </div>
       <section class="kpis">
         <div class="kpi"><span class="label">基线准确率(G0)</span><span id="kpi-baseline" class="value">—</span></div>
-        <div class="kpi accent"><span class="label">最佳释放效率 RE</span><span id="kpi-best-re" class="value">—</span></div>
+        <div class="kpi accent"><span class="label">最佳 RE</span><span id="kpi-best-re" class="value">—</span></div>
         <div class="kpi"><span class="label">最佳组别</span><span id="kpi-best-group" class="value">—</span></div>
         <div class="kpi"><span class="label">平均 CP</span><span id="kpi-cp" class="value">—</span></div>
       </section>
       <section class="grid">
-        <div class="chart-card">
-          <header><h3>释放效率 vs 准确率</h3></header>
-          <canvas id="chart-main" height="120"></canvas>
-        </div>
-        <div class="chart-card">
-          <header><h3>上下文保全 & 鲁棒性</h3></header>
-          <canvas id="chart-cp" height="120"></canvas>
-        </div>
+        <div class="chart-card"><header><h3>释放效率 vs 准确率</h3></header><canvas id="chart-main" height="120"></canvas></div>
+        <div class="chart-card"><header><h3>上下文保全 & 鲁棒性</h3></header><canvas id="chart-cp" height="120"></canvas></div>
       </section>
       <section class="table-card">
         <header><h3>各组详情</h3></header>
@@ -81,15 +73,12 @@
   <!-- ============ 对比 ============ -->
   <section id="tab-compare" class="tab-panel">
     <div class="chart-card">
-      <header><h3>选择要对比的 run（多选）</h3><span class="muted small">勾选后自动生成横向对比表</span></header>
+      <header><h3>选择要对比的 run(多选)</h3><span class="muted small">勾选后自动生成横向对比表</span></header>
       <div id="compare-picker" class="compare-picker"></div>
     </div>
     <div class="chart-card">
-      <header><h3>横向对比（每格 = 该 run 该组的 accuracy）</h3>
-             <span class="muted small"><label><input type="checkbox" id="compare-re"> 显示 RE(相对各自基线)</label></span></header>
-      <div class="table-wrap">
-        <table id="compare-table" class="compare-table"></table>
-      </div>
+      <header><h3>横向对比(每格 = accuracy)</h3><span class="muted small"><label><input type="checkbox" id="compare-re"> 显示 RE</label></span></header>
+      <div class="table-wrap"><table id="compare-table" class="compare-table"></table></div>
     </div>
   </section>
 
@@ -97,16 +86,19 @@
   <section id="tab-launch" class="tab-panel">
     <div class="chart-card launch-card">
       <header><h3>配置并启动一次运行</h3><span id="launch-warn" class="muted small"></span></header>
-      <div class="form-grid">
-        <label>模型<input id="f-model" type="text" placeholder="deepseek-chat" value="deepseek-chat"></label>
+      <div class="form-grid form-grid-5">
+        <label>API 配置<select id="f-profile"></select></label>
         <label>keys<input id="f-nkeys" type="number" value="46"></label>
         <label>updates/key<input id="f-updates" type="number" value="4"></label>
         <label>试次数<input id="f-trials" type="number" value="10"></label>
         <label>k_repeats<input id="f-krepeats" type="number" value="3"></label>
       </div>
+      <div class="profile-info" id="f-profile-info"></div>
       <div class="form-groups">
-        <span class="muted small">选择组别(G0 会自动加入作为基线):</span>
-        <div id="launch-groups" class="group-checkboxes"></div>
+        <div class="form-groups-head">
+          <span class="muted small">选择组别(G0 自动加入作为基线)—— 每个组右侧有说明</span>
+        </div>
+        <div id="launch-groups" class="group-list"></div>
       </div>
       <div class="form-actions">
         <button id="launch-btn" class="primary">启动运行</button>
@@ -114,9 +106,30 @@
       </div>
     </div>
   </section>
+
+  <!-- ============ 设置 ============ -->
+  <section id="tab-settings" class="tab-panel">
+    <div class="chart-card">
+      <header><h3>已保存的 API 配置</h3><span class="muted small">密钥仅显示末四位;新增后可在「启动」标签选用</span></header>
+      <div id="settings-profiles" class="settings-profiles"></div>
+    </div>
+    <div class="chart-card">
+      <header><h3>添加 / 更新配置(同名覆盖)</h3></header>
+      <div class="form-grid form-grid-4">
+        <label>名称<input id="p-name" type="text" placeholder="deepseek"></label>
+        <label>base_url<input id="p-baseurl" type="text" placeholder="https://api.deepseek.com"></label>
+        <label>api_key<input id="p-apikey" type="password" placeholder="sk-..."></label>
+        <label>model<input id="p-model" type="text" placeholder="deepseek-chat"></label>
+      </div>
+      <div class="form-actions">
+        <button id="p-save" class="primary">保存</button>
+        <span id="p-msg" class="muted small"></span>
+      </div>
+    </div>
+  </section>
 </main>
 
-<footer class="small">pi-release-exp · 数据来自本地 runs/ 目录 · 日志 /tmp/pi_run.log</footer>
+<footer class="small">pi-release-exp · 数据来自本地 runs/ · 组定义在 src/groups/ 包里</footer>
 <script src="/app.js"></script>
 </body>
 </html>

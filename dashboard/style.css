@@ -363,3 +363,52 @@ button.primary {
 button.primary:hover:not(:disabled) { background: #0860c9; }
 button.primary:disabled { background: var(--muted-2); cursor: not-allowed; }
 
+/* launch: profile info line */
+.profile-info { font-size: 12px; color: var(--text-2); margin: -6px 0 14px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+/* launch: group list with descriptions */
+.group-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
+.group-item {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm); cursor: pointer; background: var(--card);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.group-item:hover { border-color: var(--accent); box-shadow: var(--shadow); }
+.group-item input[type=checkbox] { margin-top: 3px; }
+.group-item-body { flex: 1; min-width: 0; }
+.group-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.group-item-name { font-weight: 600; font-size: 13px; color: var(--text); }
+.group-item-desc { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+
+/* settings: profiles */
+.settings-profiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.profile-card {
+  background: var(--card); border: 1px solid var(--border-light);
+  border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow);
+}
+.profile-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.profile-name { font-weight: 600; font-size: 14px; color: var(--text); }
+.profile-detail { font-size: 12px; margin: 3px 0; display: flex; gap: 8px; align-items: baseline; }
+.profile-detail .muted { min-width: 56px; }
+.profile-detail code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px;
+  color: var(--text-2); background: var(--bg); padding: 1px 6px; border-radius: 4px;
+  word-break: break-all;
+}
+.link-btn {
+  background: none; border: none; color: var(--red); cursor: pointer;
+  font-size: 12px; padding: 2px 6px;
+}
+.link-btn:hover { text-decoration: underline; }
+
+/* form grid variants */
+.form-grid-5 { grid-template-columns: repeat(5, 1fr); }
+.form-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.launch-card select, .launch-card option { font-family: inherit; }
+
+@media (max-width: 1100px) {
+  .group-list, .settings-profiles { grid-template-columns: 1fr; }
+  .form-grid-5, .form-grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+

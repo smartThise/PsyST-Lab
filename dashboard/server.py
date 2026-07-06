@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """Zero-dependency dashboard + control server.
 
-Stdlib only (http.server). Serves results, live run status, cross-run
-comparison, and a launch endpoint to start runs from the UI.
-
-    python dashboard/server.py
-    # open http://localhost:8765
+Stdlib only. Serves results, live status, cross-run comparison, group
+descriptions, API-profile management, and a launch endpoint.
 
 Routes:
-    GET  /                           UI (index.html)
-    GET  /style.css /app.js          static
-    GET  /api/runs                   list run metadata
-    GET  /api/run/<tag>              summary.json
-    GET  /api/run/<tag>/results      per-call records (jsonl -> array)
-    GET  /api/status                 live: running process, log tail, progress
-    GET  /api/compare?tags=a,b,...   cross-run group metrics
-    GET  /api/groups                 known group IDs (for launch form)
-    POST /api/launch                 launch a run {model, groups, n_keys, ...}
+    GET  /                         UI
+    GET  /style.css /app.js        static
+    GET  /api/runs                 list run metadata
+    GET  /api/run/<tag>            summary.json
+    GET  /api/run/<tag>/results    per-call records
+    GET  /api/status               live: running process, log tail, progress
+    GET  /api/compare?tags=...     cross-run group metrics
+    GET  /api/groups               group ids + names + descriptions
+    GET  /api/profiles             saved API profiles (keys masked)
+    POST /api/profiles             add/update a profile {name, base_url, api_key, model}
+    DELETE /api/profiles?name=...  remove a profile
+    POST /api/launch               {profile, groups, n_keys, ...} -> spawn run
 """
 from __future__ import annotations
 
@@ -30,14 +30,23 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 RUNS_DIR = ROOT / "runs"
+CONFIG_YAML = ROOT / "config" / "config.yaml"
+PROFILES_YAML = ROOT / "config" / "api_profiles.yaml"
 DASH_DIR = Path(__file__).resolve().parent
 LOG_FILE = Path("/tmp/pi_run.log")
 HOST, PORT = "127.0.0.1", 8765
 
-# groups the launch form can pick from (must match src/groups.py REGISTRY)
-KNOWN_GROUPS = ["G0", "G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "S3", "S5"]
+# groups the launch form can pick from (id, name, description for the UI)
+# Groups are auto-discovered from src/groups/*.py — drop a new file there
+# and it appears here, in the registry, and the launch UI with no other edit.
+sys.path.insert(0, str(ROOT / "src"))
+import groups as _groups_mod  # noqa: E402
+GROUP_INFO = _groups_mod.GROUP_META
+KNOWN_GROUPS = _groups_mod.KNOWN_GROUPS
 
 
 # ----------------------------- data helpers -----------------------------
@@ -117,7 +126,6 @@ def _status() -> dict:
         except Exception:
             pass
 
-    # latest run dir + its record count
     latest_tag, records, total = None, 0, None
     if RUNS_DIR.exists():
         subs = [d for d in RUNS_DIR.iterdir() if d.is_dir()]
@@ -127,14 +135,12 @@ def _status() -> dict:
             rf = ld / "results.jsonl"
             if rf.exists():
                 records = sum(1 for _ in open(rf, "r", encoding="utf-8"))
-            # planned total from the latest run's run_config.json (reflects overrides + filters)
             try:
                 rc = json.loads((ld / "run_config.json").read_text(encoding="utf-8"))
                 total = rc.get("planned_total")
             except Exception:
                 pass
 
-    # current group from log
     current_group = None
     for line in reversed(log_tail.splitlines()):
         m = re.search(r"=== Group (\S+)", line)
@@ -143,13 +149,9 @@ def _status() -> dict:
             break
 
     return {
-        "running": running,
-        "pids": pids,
-        "current_group": current_group,
-        "latest_run": latest_tag,
-        "records_done": records,
-        "records_total": total,
-        "log_tail": log_tail,
+        "running": running, "pids": pids, "current_group": current_group,
+        "latest_run": latest_tag, "records_done": records,
+        "records_total": total, "log_tail": log_tail,
     }
 
 
@@ -162,8 +164,7 @@ def _compare(tags: list[str]) -> dict:
         if s is None:
             continue
         out[tag] = {
-            "tag": tag,
-            "model": s.get("model"),
+            "tag": tag, "model": s.get("model"),
             "baseline_acc": s.get("baseline_acc"),
             "pi_test": s.get("pi_test", {}),
             "groups": {g["id"]: g for g in s.get("groups", [])},
@@ -171,12 +172,98 @@ def _compare(tags: list[str]) -> dict:
     return out
 
 
+# ----------------------------- API profiles -----------------------------
+
+def _mask_key(k: str) -> str:
+    k = str(k or "")
+    if len(k) <= 8:
+        return "***"
+    return k[:4] + "***" + k[-4:]
+
+
+def _load_profiles() -> list[dict]:
+    if not PROFILES_YAML.exists():
+        return []
+    try:
+        data = yaml.safe_load(PROFILES_YAML.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return []
+    return data.get("profiles", []) if isinstance(data, dict) else []
+
+
+def _save_profiles(profiles: list[dict]) -> None:
+    PROFILES_YAML.parent.mkdir(parents=True, exist_ok=True)
+    PROFILES_YAML.write_text(
+        yaml.safe_dump({"profiles": profiles}, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
+def _seed_profiles_from_config() -> None:
+    """If no profiles exist yet, seed one from the current config.yaml."""
+    if _load_profiles():
+        return
+    if not CONFIG_YAML.exists():
+        return
+    try:
+        cfg = yaml.safe_load(CONFIG_YAML.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return
+    base_url = cfg.get("base_url") or ""
+    api_key = cfg.get("api_key") or ""
+    model = cfg.get("model") or ""
+    if not (base_url and api_key and model):
+        return
+    name = "default"
+    # derive a short name from host's registrable segment (api.deepseek.com -> deepseek)
+    m = re.search(r"://([^/]+)", base_url)
+    if m:
+        parts = m.group(1).split(".")
+        name = parts[-2] if len(parts) >= 2 else m.group(1)
+    _save_profiles([{
+        "name": name, "base_url": base_url, "api_key": api_key, "model": model,
+    }])
+
+
+def _apply_profile_to_config(profile: dict) -> None:
+    """Write the chosen profile's base_url/api_key/model into config.yaml so
+    run_all.py (which reads config.yaml) uses them. Preserves other fields
+    like extra_body; comments are lost on rewrite."""
+    CONFIG_YAML.parent.mkdir(parents=True, exist_ok=True)
+    data = {}
+    if CONFIG_YAML.exists():
+        try:
+            data = yaml.safe_load(CONFIG_YAML.read_text(encoding="utf-8")) or {}
+        except Exception:
+            data = {}
+    data["base_url"] = profile["base_url"]
+    data["api_key"] = profile["api_key"]
+    data["model"] = profile["model"]
+    CONFIG_YAML.write_text(
+        yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
 # ----------------------------- launch -----------------------------
 
 def _launch(body: dict) -> dict:
     if _find_runner_pids():
-        return {"launched": False, "error": "a run is already running; wait for it to finish"}
+        return {"launched": False, "error": "已有 run 在跑,请等它结束"}
+
+    # resolve profile -> write into config.yaml
+    profiles = _load_profiles()
+    pname = body.get("profile")
+    profile = next((p for p in profiles if p["name"] == pname), None)
+    if profile is None:
+        # fall back to whatever's in config.yaml
+        profile = {"name": "(current config)", "base_url": None, "api_key": None, "model": None}
+    else:
+        _apply_profile_to_config(profile)
+
     groups = [g for g in body.get("groups", []) if g in KNOWN_GROUPS]
+    if "G0" not in groups:
+        groups.insert(0, "G0")
     if not groups:
         return {"launched": False, "error": "no valid groups selected"}
 
@@ -184,8 +271,8 @@ def _launch(body: dict) -> dict:
     if not Path(py).exists():
         py = sys.executable
     args = [py, str(ROOT / "scripts" / "run_all.py"), "--groups"] + groups
-    if body.get("model"):
-        args += ["--model", str(body["model"])]
+    if profile.get("model"):
+        args += ["--model", str(profile["model"])]
     for key, cli in [("n_keys", "--n-keys"), ("updates_per_key", "--updates"),
                      ("n_trials", "--trials"), ("k_repeats", "--k-repeats")]:
         v = body.get(key)
@@ -201,7 +288,8 @@ def _launch(body: dict) -> dict:
         args, cwd=str(ROOT), stdout=log_fp, stderr=subprocess.STDOUT,
         start_new_session=True,
     )
-    return {"launched": True, "args": args, "groups": groups}
+    return {"launched": True, "profile": profile.get("name"),
+            "model": profile.get("model"), "groups": groups}
 
 
 # ----------------------------- handler -----------------------------
@@ -225,6 +313,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send(200, path.read_bytes(), ctype)
 
+    def _read_body(self) -> dict:
+        length = int(self.headers.get("Content-Length", 0))
+        try:
+            return json.loads(self.rfile.read(length) or "{}")
+        except Exception:
+            return {}
+
     def do_GET(self):  # noqa: N802
         p = urlparse(self.path).path
         qs = parse_qs(urlparse(self.path).query)
@@ -240,7 +335,11 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/api/status":
             self._send_json(200, _status())
         elif p == "/api/groups":
-            self._send_json(200, {"groups": KNOWN_GROUPS})
+            self._send_json(200, {"groups": GROUP_INFO})
+        elif p == "/api/profiles":
+            profiles = [{**p, "api_key": _mask_key(p.get("api_key"))}
+                        for p in _load_profiles()]
+            self._send_json(200, {"profiles": profiles})
         elif p == "/api/compare":
             tags = [t for t in qs.get("tags", [""])[0].split(",") if t]
             self._send_json(200, _compare(tags))
@@ -258,12 +357,34 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         p = urlparse(self.path).path
         if p == "/api/launch":
-            length = int(self.headers.get("Content-Length", 0))
-            try:
-                body = json.loads(self.rfile.read(length) or "{}")
-            except Exception:
-                body = {}
-            self._send_json(200, _launch(body))
+            self._send_json(200, _launch(self._read_body()))
+        elif p == "/api/profiles":
+            body = self._read_body()
+            name = (body.get("name") or "").strip()
+            if not name or not body.get("base_url") or not body.get("api_key"):
+                self._send_json(400, {"ok": False, "error": "name / base_url / api_key 不能为空"})
+                return
+            profiles = _load_profiles()
+            profiles = [pp for pp in profiles if pp.get("name") != name]  # replace if exists
+            profiles.append({
+                "name": name,
+                "base_url": body["base_url"].strip(),
+                "api_key": body["api_key"].strip(),
+                "model": (body.get("model") or "").strip(),
+            })
+            _save_profiles(profiles)
+            self._send_json(200, {"ok": True, "name": name})
+        else:
+            self._send(404, b"Not found", "text/plain")
+
+    def do_DELETE(self):  # noqa: N802
+        p = urlparse(self.path).path
+        qs = parse_qs(urlparse(self.path).query)
+        if p == "/api/profiles":
+            name = (qs.get("name", [""])[0]).strip()
+            profiles = [pp for pp in _load_profiles() if pp.get("name") != name]
+            _save_profiles(profiles)
+            self._send_json(200, {"ok": True, "deleted": name})
         else:
             self._send(404, b"Not found", "text/plain")
 
@@ -273,13 +394,13 @@ class Handler(BaseHTTPRequestHandler):
 
 def main(open_browser: bool = True):
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    _seed_profiles_from_config()  # first run: import current config.yaml as a profile
     n = len(_list_runs())
-    print(f"[dashboard] {n} run(s) found under {RUNS_DIR}", file=sys.stderr)
-    url = f"http://{HOST}:{PORT}"
-    print(f"[dashboard] serving on {url}", file=sys.stderr)
+    print(f"[dashboard] {n} run(s), {len(_load_profiles())} profile(s)", file=sys.stderr)
+    print(f"[dashboard] serving on http://{HOST}:{PORT}", file=sys.stderr)
     if open_browser:
         try:
-            webbrowser.open(url)
+            webbrowser.open(f"http://{HOST}:{PORT}")
         except Exception:
             pass
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
