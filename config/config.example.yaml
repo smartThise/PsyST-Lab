@@ -7,12 +7,12 @@
 # DMXAPI (OpenAI-compatible) endpoint — same one used by the
 # serial-dependence project. Any OpenAI-compatible /chat/completions
 # endpoint works.
-base_url: "https://www.dmxapi.cn/v1"
-api_key: "YOUR_API_KEY"
+base_url: ""
+api_key: ""
 
 # Model under test. Use something cheap for iteration (gpt-4o-mini),
 # then re-run the winning groups on stronger models.
-model: "gpt-4o-mini"
+model: "deepseek-v4-pro"
 
 # Generation temperature. Most groups want 0.0 for determinism;
 # the self-generation group (G6) overrides this to 0.8 locally.
@@ -22,3 +22,19 @@ max_tokens: 64
 # Reliability
 max_retries: 5          # exponential backoff on failure / rate limit
 timeout: 60             # seconds per call
+
+# Vendor-specific params merged into every /chat/completions payload.
+# Use this for knobs the OpenAI schema doesn't standardize.
+#
+# DeepSeek reasoning models (deepseek-v4-pro / deepseek-reasoner) spend tokens
+# on a hidden "thinking" pass before answering. To match the paper's non-CoT
+# setup, disable it:
+#   extra_body:
+#     thinking:
+#       type: disabled      # or "enabled" to turn reasoning back on
+#
+# Other vendors: leave extra_body unset, or add whatever they accept
+# (top_p, response_format, guided_json, ...).
+extra_body:
+  thinking:
+    type: disabled

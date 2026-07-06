@@ -30,26 +30,25 @@ def _load_categories() -> dict[str, list[str]]:
     return {k: v for k, v in d.items() if not k.startswith("_")}
 
 
-def _interleave(order_groups: list[list[str]], rng: random.Random) -> list[str]:
-    """Interleave per-key update slots so no same key is consecutive."""
-    out: list[str] = []
-    prev: str | None = None
-    for group in order_groups:
-        queue = list(group)
-        while queue:
-            rng.shuffle(queue)
-            # pick first admissible (different from prev)
-            picked_idx = None
-            for i, k in enumerate(queue):
-                if k != prev:
-                    picked_idx = i
-                    break
-            if picked_idx is None:  # all remaining == prev; must place anyway
-                picked_idx = 0
-            k = queue.pop(picked_idx)
-            out.append(k)
-            prev = k
-    return out
+def _pseudo_randomize(records: list[dict], rng: random.Random) -> list[dict]:
+    """Shuffle update records so no two consecutive share the same key.
+
+    Matches the paper's `pseudo_randomize(max_key_repeat=0)`: fully random order
+    (NOT round-robin), with the only constraint being no immediate key repetition.
+    This is critical — a round-robin schedule puts every key's final update in the
+    last round, letting the model read all answers off the stream's tail.
+    """
+    remaining = list(records)
+    rng.shuffle(remaining)
+    result = [remaining.pop()]
+    while remaining:
+        last_key = result[-1]["key"]
+        candidates = [i for i, r in enumerate(remaining) if r["key"] != last_key]
+        # with >=2 keys and balanced counts, candidates is essentially always non-empty;
+        # if it ever empties near the tail, fall back to any remaining record.
+        next_idx = rng.choice(candidates) if candidates else rng.randrange(len(remaining))
+        result.append(remaining.pop(next_idx))
+    return result
 
 
 def generate(n_keys: int = 3, updates_per_key: int = 80, seed: int | None = None) -> PITest:
@@ -59,27 +58,29 @@ def generate(n_keys: int = 3, updates_per_key: int = 80, seed: int | None = None
         raise ValueError(f"n_keys={n_keys} but only {len(cats)} categories available")
     chosen = rng.sample(list(cats.keys()), n_keys)
 
-    # each key gets `updates_per_key` update slots; values sampled with replacement
-    order_groups: list[list[str]] = []
-    updates: list[dict] = []
-    targets: dict[str, str] = {}
-    first_values: dict[str, str] = {}
-    per_key_idx = {k: 0 for k in chosen}
+    updates_per_key = int(updates_per_key)
+    # Paper uses sample_replacement=0: each value appears at most once per key.
+    for k in chosen:
+        if updates_per_key > len(cats[k]):
+            raise ValueError(
+                f"updates_per_key={updates_per_key} exceeds {len(cats[k])} "
+                f"available words for '{k}' (set sample_replacement on, or lower updates)"
+            )
+    per_key_values = {k: rng.sample(cats[k], updates_per_key) for k in chosen}
 
-    # build the schedule first (keys only)
-    key_schedule = _interleave([list(chosen) for _ in range(updates_per_key)], rng)
+    # build one record per update, then pseudo-randomize their stream order.
+    # values are assigned in per-key update order; the LAST value per key is the target.
+    records: list[dict] = []
+    for k in chosen:
+        for i in range(updates_per_key):
+            records.append({"key": k, "value": per_key_values[k][i], "idx": i + 1})
+    updates = _pseudo_randomize(records, rng)
 
-    # assign values per scheduled key
-    for k in key_schedule:
-        per_key_idx[k] += 1
-        val = rng.choice(cats[k])
-        if per_key_idx[k] == 1:
-            first_values[k] = val
-        updates.append({"key": k, "value": val, "idx": per_key_idx[k]})
-        targets[k] = val  # last assignment wins
+    targets = {k: per_key_values[k][-1] for k in chosen}
+    first_values = {k: per_key_values[k][0] for k in chosen}
 
-    # format stream (no numeric prefix — paper says prefixes weren't in input)
-    stream_text = "; ".join(f"{u['key']}: {u['value']}" for u in updates) + "."
+    # format stream (paper: f"{key}: {item}; " concatenated, trailing "; ")
+    stream_text = "".join(f"{u['key']}: {u['value']}; " for u in updates)
     return PITest(
         keys=list(chosen),
         updates=updates,

@@ -1,6 +1,11 @@
 """OpenAI-compatible chat client with exponential backoff.
 
-Works with DMXAPI or any endpoint exposing POST /chat/completions.
+Works with DMXAPI, DeepSeek, OpenRouter, or any endpoint exposing
+POST /chat/completions.
+
+Vendor-specific knobs (e.g. DeepSeek's `thinking: {type: none}` to disable
+reasoning) are passed through via `extra_body`, which is merged into the
+request payload on every call.
 """
 from __future__ import annotations
 
@@ -24,6 +29,7 @@ class APIClient:
         max_tokens: int = 64,
         max_retries: int = 5,
         timeout: int = 60,
+        extra_body: dict[str, Any] | None = None,
     ):
         self.url = base_url.rstrip("/") + "/chat/completions"
         self.api_key = api_key
@@ -32,6 +38,9 @@ class APIClient:
         self.max_tokens = max_tokens
         self.max_retries = max_retries
         self.timeout = timeout
+        # Merged into every payload. Use for vendor params like
+        # {"thinking": {"type": "none"}} (DeepSeek) to disable reasoning.
+        self.extra_body = extra_body or {}
 
     def chat(self, user_message: str, temperature: float | None = None,
              max_tokens: int | None = None) -> str:
@@ -42,6 +51,9 @@ class APIClient:
             "temperature": self.temperature if temperature is None else temperature,
             "max_tokens": self.max_tokens if max_tokens is None else max_tokens,
         }
+        if self.extra_body:
+            payload.update(self.extra_body)
+
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",

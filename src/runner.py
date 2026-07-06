@@ -30,6 +30,7 @@ def _build_client(cfg: dict, overrides: dict) -> api_client.APIClient:
         max_tokens=cfg.get("max_tokens", 64),
         max_retries=cfg.get("max_retries", 5),
         timeout=cfg.get("timeout", 60),
+        extra_body=cfg.get("extra_body"),
         **{k: v for k, v in overrides.items() if k in ("temperature", "max_tokens")},
     )
 
