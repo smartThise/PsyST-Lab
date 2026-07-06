@@ -105,13 +105,31 @@ def _load_results(tag: str, limit: int = 2000) -> list[dict]:
 # ----------------------------- live status -----------------------------
 
 def _find_runner_pids() -> list[str]:
+    """PIDs of live run_all.py processes, excluding zombies (state Z).
+
+    A run_all.py that finished becomes a zombie until reaped; pgrep would still
+    match it and falsely report 'running'. We use ps + state filter, and rely
+    on SIGCHLD=SIG_IGN (set in main) to auto-reap so zombies rarely linger.
+    """
     try:
         out = subprocess.run(
-            ["pgrep", "-f", "run_all.py"], capture_output=True, text=True, timeout=2
-        ).stdout.strip()
-        return [p for p in out.split() if p]
+            ["ps", "-eo", "pid=,stat=,command="], capture_output=True, text=True, timeout=2
+        ).stdout
     except Exception:
         return []
+    pids = []
+    for line in out.splitlines():
+        line = line.strip()
+        if not line or "run_all.py" not in line:
+            continue
+        parts = line.split(None, 2)
+        if len(parts) < 3:
+            continue
+        pid, stat, _cmd = parts
+        if "Z" in stat:  # zombie / defunct — already dead, ignore
+            continue
+        pids.append(pid)
+    return pids
 
 
 def _status() -> dict:
@@ -413,6 +431,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main(open_browser: bool = True):
+    # auto-reap spawned run_all.py children so they don't linger as zombies
+    # (a zombie would still match the running-process check and block launches)
+    import signal
+    try:
+        signal.signal(signal.SIGCHLD, signal.SIG_IGN)
+    except (ValueError, OSError):
+        pass  # not main thread / unsupported
+
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     _seed_profiles_from_config()  # first run: import current config.yaml as a profile
     n = len(_list_runs())
