@@ -1,4 +1,4 @@
-// PI-Release dashboard frontend
+// PI 释放实验 · 仪表盘前端
 const $ = (id) => document.getElementById(id);
 const fmt = (x, d = 3) => (x === null || x === undefined || isNaN(x)) ? "—" : Number(x).toFixed(d);
 const pct = (x) => (x === null || x === undefined || isNaN(x)) ? "—" : (Number(x) * 100).toFixed(1) + "%";
@@ -11,13 +11,18 @@ async function fetchJSON(url) {
   return r.json();
 }
 
+// 各组配色(浅底友好)
 function groupColor(id) {
-  if (id.startsWith("G0")) return "#8b949e";
-  if (id.startsWith("G2")) return "#38bdf8";
-  if (id.startsWith("G4") || id.startsWith("G5")) return "#f87171";
-  if (id.startsWith("G6")) return "#a78bfa";
-  if (id.startsWith("S")) return "#2dd4bf";
-  return "#4ade80";
+  if (id.startsWith("G0")) return "#8c959f";   // 基线:灰
+  if (id.startsWith("G1")) return "#636c76";
+  if (id.startsWith("G2")) return "#0969da";   // Mock-QA(论文赢家):蓝
+  if (id.startsWith("G3")) return "#8250df";   // 句法断崖:紫
+  if (id.startsWith("G4")) return "#cf222e";   // glitch:红(最大未知数)
+  if (id.startsWith("G5")) return "#bf8700";   // unicode:琥珀
+  if (id.startsWith("G6")) return "#1a7f37";   // 自生成:绿
+  if (id.startsWith("G7")) return "#0550ae";
+  if (id.startsWith("S"))  return "#0969da";   // 堆叠:蓝(强调)
+  return "#57606a";
 }
 
 function reColor(re) {
@@ -27,15 +32,21 @@ function reColor(re) {
   return "var(--red)";
 }
 
+function cpColor(cp) {
+  if (cp === null || cp === undefined || isNaN(cp)) return "var(--muted)";
+  return cp > 0.5 ? "var(--green)" : "var(--red)";
+}
+
 function tagClass(id) {
-  if (id.startsWith("S")) return "tag tag-g";
+  if (id.startsWith("S"))  return "tag tag-g";
   if (id.startsWith("G0")) return "tag tag-n";
   if (id.startsWith("G2")) return "tag tag-g";
   if (id.startsWith("G4") || id.startsWith("G5")) return "tag tag-r";
+  if (id.startsWith("G6")) return "tag tag-v";
   return "tag tag-a";
 }
 
-// ---------- run list ----------
+// ---------- 运行列表 ----------
 async function loadRuns(selectTag) {
   const runs = await fetchJSON("/api/runs");
   const sel = $("run-select");
@@ -50,17 +61,15 @@ async function loadRuns(selectTag) {
   for (const r of runs) {
     const opt = document.createElement("option");
     opt.value = r.tag;
-    opt.textContent = `${r.tag}  ·  ${r.model}  ·  ${(r.baseline_acc * 100).toFixed(1)}% baseline  ·  ${r.n_groups} groups`;
+    opt.textContent = `${r.tag} · ${r.model} · 基线 ${(r.baseline_acc * 100).toFixed(1)}% · ${r.n_groups} 组`;
     sel.appendChild(opt);
   }
-  if (selectTag && runs.find(r => r.tag === selectTag)) {
-    sel.value = selectTag;
-  }
+  if (selectTag && runs.find(r => r.tag === selectTag)) sel.value = selectTag;
   sel.onchange = () => loadRun(sel.value);
   if (sel.value) loadRun(sel.value);
 }
 
-// ---------- single run ----------
+// ---------- 单次运行 ----------
 async function loadRun(tag) {
   if (!tag) return;
   const [summary, records] = await Promise.all([
@@ -77,10 +86,10 @@ async function loadRun(tag) {
 function renderMeta(s, records) {
   const pi = s.pi_test || {};
   const ev = s.eval || {};
-  $("meta-model").textContent  = `model: ${s.model}`;
-  $("meta-pi").textContent     = `PI: ${pi.n_keys} keys × ${pi.updates_per_key} updates`;
-  $("meta-eval").textContent   = `eval: k=${ev.k_repeats}, ${pi.n_trials} trials`;
-  $("meta-calls").textContent  = `${records.length} records`;
+  $("meta-model").textContent = `模型:${s.model}`;
+  $("meta-pi").textContent    = `PI 设置:${pi.n_keys} key × ${pi.updates_per_key} 次更新`;
+  $("meta-eval").textContent  = `评估:k=${ev.k_repeats} × ${pi.n_trials} 试次`;
+  $("meta-calls").textContent = `${records.length} 条记录`;
 }
 
 function renderKPIs(s) {
@@ -89,9 +98,9 @@ function renderKPIs(s) {
   const withRE = groups.filter(g => g.id !== "G0");
   const best = withRE.reduce((a, b) => ((b.re || 0) > (a?.re || 0) ? b : a), null);
 
-  $("kpi-baseline").textContent = pct(baseline);
-  $("kpi-best-re").textContent = best ? fmt(best.re) : "—";
-  $("kpi-best-group").textContent = best ? best.id : "—";
+  $("kpi-baseline").textContent    = pct(baseline);
+  $("kpi-best-re").textContent     = best ? fmt(best.re) : "—";
+  $("kpi-best-group").textContent  = best ? best.id : "—";
 
   const cps = groups.filter(g => g.cp !== null && g.cp !== undefined).map(g => g.cp);
   const meanCP = cps.length ? cps.reduce((a, b) => a + b, 0) / cps.length : null;
@@ -103,19 +112,37 @@ function destroyCharts() {
   charts = {};
 }
 
+// Chart.js 浅色主题公共配置
+const LIGHT = {
+  grid:    "rgba(31,35,40,0.08)",
+  tick:    "#57606a",
+  tooltip: {
+    backgroundColor: "#ffffff",
+    borderColor: "#d0d7de",
+    borderWidth: 1,
+    titleColor: "#1f2328",
+    bodyColor: "#424a53",
+    boxPadding: 4,
+    cornerRadius: 6,
+  },
+};
+
 function renderCharts(s) {
   destroyCharts();
   const groups = (s.groups || []).slice();
   const labels = groups.map(g => g.id);
-  const baseTooltip = {
-    backgroundColor: "#0b0f17",
-    borderColor: "#232c3b",
-    borderWidth: 1,
-    titleColor: "#e6edf3",
-    bodyColor: "#e6edf3",
+  const scales = {
+    x: { ticks: { color: LIGHT.tick, font: { size: 12 } }, grid: { display: false }, border: { color: "#d0d7de" } },
+    y: {
+      beginAtZero: true, max: 1,
+      ticks: { color: LIGHT.tick, callback: v => (v * 100) + "%" },
+      grid: { color: LIGHT.grid },
+      border: { display: false },
+    },
   };
+  const legendCfg = { labels: { color: "#424a53", font: { size: 12 }, boxWidth: 12, boxHeight: 12 } };
 
-  // ---- main: accuracy + RE ----
+  // ---- 主图:准确率 + 释放效率 ----
   const ctx1 = $("chart-main").getContext("2d");
   charts.main = new Chart(ctx1, {
     type: "bar",
@@ -123,32 +150,29 @@ function renderCharts(s) {
       labels,
       datasets: [
         {
-          label: "Accuracy",
+          label: "准确率",
           data: groups.map(g => g.accuracy ?? 0),
-          backgroundColor: groups.map(g => groupColor(g.id) + "55"),
+          backgroundColor: groups.map(g => groupColor(g.id) + "22"),
           borderColor: groups.map(g => groupColor(g.id)),
           borderWidth: 1.5,
-          borderRadius: 4,
+          borderRadius: 3,
         },
         {
-          label: "Release Efficiency (RE)",
+          label: "释放效率 RE",
           data: groups.map(g => g.re ?? 0),
           backgroundColor: groups.map(g => groupColor(g.id)),
-          borderRadius: 4,
+          borderRadius: 3,
         },
       ],
     },
     options: {
       responsive: true,
-      plugins: { legend: { labels: { color: "#e6edf3" } }, tooltip: baseTooltip },
-      scales: {
-        x: { ticks: { color: "#8b949e" }, grid: { color: "#232c3b33" } },
-        y: { beginAtZero: true, max: 1, ticks: { color: "#8b949e", callback: v => (v * 100) + "%" }, grid: { color: "#232c3b33" } },
-      },
+      plugins: { legend: legendCfg, tooltip: LIGHT.tooltip },
+      scales,
     },
   });
 
-  // ---- cp + robustness ----
+  // ---- 副图:CP + 鲁棒性 ----
   const ctx2 = $("chart-cp").getContext("2d");
   charts.cp = new Chart(ctx2, {
     type: "bar",
@@ -156,26 +180,31 @@ function renderCharts(s) {
       labels,
       datasets: [
         {
-          label: "Context Preservation (CP)",
+          label: "上下文保全率 CP",
           data: groups.map(g => g.cp ?? 0),
-          backgroundColor: groups.map(g => (g.cp === null || g.cp === undefined) ? "#232c3b" : (g.cp > 0.5 ? "#4ade80" : "#f87171")),
-          borderRadius: 4,
+          backgroundColor: groups.map(g =>
+            (g.cp === null || g.cp === undefined) ? "#eaeef2"
+            : (g.cp > 0.5 ? "#dafbe1" : "#ffebe9")),
+          borderColor: groups.map(g =>
+            (g.cp === null || g.cp === undefined) ? "#d9dee4"
+            : (g.cp > 0.5 ? "#1a7f37" : "#cf222e")),
+          borderWidth: 1.2,
+          borderRadius: 3,
         },
         {
-          label: "Robustness Δ (lower = more fragile)",
+          label: "鲁棒性Δ(越小越脆弱)",
           data: groups.map(g => g.robustness_delta ?? 0),
-          backgroundColor: "#fbbf24",
-          borderRadius: 4,
+          backgroundColor: "#fff8c5",
+          borderColor: "#bf8700",
+          borderWidth: 1.2,
+          borderRadius: 3,
         },
       ],
     },
     options: {
       responsive: true,
-      plugins: { legend: { labels: { color: "#e6edf3" } }, tooltip: baseTooltip },
-      scales: {
-        x: { ticks: { color: "#8b949e" }, grid: { color: "#232c3b33" } },
-        y: { beginAtZero: true, max: 1, ticks: { color: "#8b949e", callback: v => (v * 100) + "%" }, grid: { color: "#232c3b33" } },
-      },
+      plugins: { legend: legendCfg, tooltip: LIGHT.tooltip },
+      scales,
     },
   });
 }
@@ -189,8 +218,8 @@ function renderDetailTable(s) {
       <td><span class="${tagClass(g.id)}">${g.id}</span></td>
       <td>${g.name}</td>
       <td class="num">${pct(g.accuracy)}</td>
-      <td class="num" style="color:${reColor(g.re)}">${fmt(g.re)}</td>
-      <td class="num" style="color:${(g.cp ?? 0) > 0.5 ? "var(--green)" : "var(--red)"}">${pct(g.cp)}</td>
+      <td class="num" style="color:${reColor(g.re)};font-weight:600">${fmt(g.re)}</td>
+      <td class="num" style="color:${cpColor(g.cp)}">${pct(g.cp)}</td>
       <td class="num">${fmt(g.robustness_delta)}</td>
       <td class="num">${g.n_calls ?? "—"}</td>
     `;
@@ -199,10 +228,9 @@ function renderDetailTable(s) {
 }
 
 function renderRecordsTable(records) {
-  $("records-count").textContent = `${records.length} rows`;
+  $("records-count").textContent = `共 ${records.length} 条(展示最近 200 条)`;
   const tbody = $("records-table").querySelector("tbody");
   tbody.innerHTML = "";
-  // show most recent first, cap to 200 for perf
   const rows = records.slice(-200).reverse();
   for (const r of rows) {
     const tr = document.createElement("tr");
@@ -218,7 +246,7 @@ function renderRecordsTable(records) {
   }
 }
 
-// ---------- boot ----------
+// ---------- 启动 ----------
 $("refresh").onclick = () => {
   const cur = $("run-select").value;
   loadRuns(cur);

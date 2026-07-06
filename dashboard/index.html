@@ -1,32 +1,32 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PI-Release Dashboard</title>
+<title>PI 释放实验 · 仪表盘</title>
 <link rel="stylesheet" href="/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <h1>PI&#8209;Release</h1>
-    <span class="subtitle">Proactive Interference · single-prompt release study</span>
+    <h1>PI 释放实验</h1>
+    <span class="subtitle">单 prompt 释放前涉干扰 · 基于 <a style="color:inherit" href="https://arxiv.org/abs/2506.08184" target="_blank" rel="noopener">arXiv:2506.08184</a></span>
   </div>
   <div class="run-select">
-    <label for="run-select">Run</label>
+    <label for="run-select">运行记录</label>
     <select id="run-select"><option value="">—</option></select>
-    <button id="refresh" class="ghost" title="Refresh run list">⟳</button>
+    <button id="refresh" class="ghost" title="刷新运行列表">⟳</button>
   </div>
 </header>
 
 <main>
   <section id="empty" class="empty-state">
     <div class="empty-card">
-      <h2>No runs yet</h2>
-      <p>Run the experiment, then refresh:</p>
+      <h2>暂无运行记录</h2>
+      <p>先跑一次实验,然后点上面的 ⟳ 刷新:</p>
       <pre><code>python scripts/run_all.py</code></pre>
-      <p class="muted">Then click ⟳ above.</p>
+      <p class="muted small">需要先在 config/config.yaml 配好 api_key</p>
     </div>
   </section>
 
@@ -39,29 +39,29 @@
     </section>
 
     <section class="kpis">
-      <div class="kpi"><span class="label">Baseline accuracy</span><span id="kpi-baseline" class="value">—</span></div>
-      <div class="kpi"><span class="label">Best RE</span><span id="kpi-best-re" class="value">—</span></div>
-      <div class="kpi"><span class="label">Best group</span><span id="kpi-best-group" class="value">—</span></div>
-      <div class="kpi"><span class="label">Mean CP</span><span id="kpi-cp" class="value">—</span></div>
+      <div class="kpi"><span class="label">基线准确率(G0)</span><span id="kpi-baseline" class="value">—</span></div>
+      <div class="kpi accent"><span class="label">最佳释放效率 RE</span><span id="kpi-best-re" class="value">—</span></div>
+      <div class="kpi"><span class="label">最佳组别</span><span id="kpi-best-group" class="value">—</span></div>
+      <div class="kpi"><span class="label">平均上下文保全率</span><span id="kpi-cp" class="value">—</span></div>
     </section>
 
     <section class="grid">
-      <div class="chart-card span-2">
-        <header><h3>Release Efficiency vs Accuracy</h3><span class="muted">per group</span></header>
+      <div class="chart-card">
+        <header><h3>释放效率 vs 准确率(按组别)</h3><span class="muted small">条形越高越好</span></header>
         <canvas id="chart-main" height="120"></canvas>
       </div>
       <div class="chart-card">
-        <header><h3>CP &amp; Robustness</h3><span class="muted">collapse check</span></header>
+        <header><h3>上下文保全 & 鲁棒性</h3><span class="muted small">区分"释放"与"坠毁"</span></header>
         <canvas id="chart-cp" height="120"></canvas>
       </div>
     </section>
 
     <section class="table-card">
-      <header><h3>Per-group detail</h3></header>
+      <header><h3>各组详情</h3><span class="muted small">RE 越高越好;CP 越低越接近崩溃</span></header>
       <table id="detail-table">
         <thead>
           <tr>
-            <th>ID</th><th>Name</th><th>Accuracy</th><th>RE</th><th>CP</th><th>Rob Δ</th><th>Calls</th>
+            <th>编号</th><th>名称</th><th>准确率</th><th>释放效率 RE</th><th>上下文保全 CP</th><th>鲁棒性Δ</th><th>调用数</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -69,10 +69,10 @@
     </section>
 
     <section class="table-card">
-      <header><h3>Per-trial records (latest run)</h3><span class="muted" id="records-count"></span></header>
+      <header><h3>每试次原始记录</h3><span class="muted small" id="records-count"></span></header>
       <table id="records-table">
         <thead>
-          <tr><th>Group</th><th>Trial</th><th>Accuracy</th><th>CP</th><th>Rob Δ</th><th>Calls</th></tr>
+          <tr><th>组别</th><th>试次</th><th>准确率</th><th>CP</th><th>鲁棒性Δ</th><th>调用数</th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -80,8 +80,8 @@
   </div>
 </main>
 
-<footer class="muted small">
-  pi-release-exp · <a href="https://arxiv.org/abs/2506.08184" target="_blank" rel="noopener">based on arXiv:2506.08184</a>
+<footer class="small">
+  pi-release-exp · 前涉干扰(PI)释放研究框架 · 数据来自本地 runs/ 目录
 </footer>
 
 <script src="/app.js"></script>
