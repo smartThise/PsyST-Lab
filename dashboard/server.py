@@ -194,6 +194,7 @@ def _find_runner_pids() -> list[str]:
             continue
         low = cmd.lower()
         if "launch.py" in cmd and "python" in low and "--dashboard" not in cmd:
+            pids.append(pid)
     return pids
 
 
