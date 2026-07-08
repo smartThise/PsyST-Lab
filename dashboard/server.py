@@ -245,7 +245,11 @@ def _status(module_id: str = "") -> dict:
 
     current_group = None
     for line in reversed(log_tail.splitlines()):
-        m = re.search(r"=== (?:Group|Task|Condition) (\S+)", line)
+        # old format: "=== Group G4+G2+G8s (...)"
+        m = re.search(r"===\s*(?:Group|Task)\s+(\S+)", line)
+        # new format: "  [5/36] WN_exp: rpi=0.85 ..."
+        if not m:
+            m = re.search(r"\]\s+(\S+):", line)
         if m:
             current_group = m.group(1).split("(")[0].strip()
             break
