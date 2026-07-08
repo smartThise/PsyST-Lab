@@ -17,7 +17,7 @@ from .prompts import RECALL_SYSTEM, RATING_SYSTEM
 # ═══════════════════════════════════════════════════════════════
 register_launch("recall_rating", LaunchConfig(
     composer="checklist",
-    description="勾选要测试的语义类别对。每个词对会同时跑 recall (测 PI 释放) 和 rating (测序列评分偏差) 两种模式。",
+    description="勾选要测试的语义类别对。每个词对会同时跑 recall (测 PI 释放) 和 rating (测序列评分偏差) 两种模式。Recall=多轮回忆实验组(第4轮切换类别), 对照=不切换基线, Rating=逐词valence评分。",
     extra_params=[
         {"key": "n_trials", "label": "试次数", "type": "int", "default": 1},
         {"key": "k_repeats", "label": "K Repeats", "type": "int", "default": 1},
@@ -59,13 +59,23 @@ class RRModule(BaseModule):
         conds = []
         for pid in sorted(self.pairs, key=lambda k: self.pairs[k].rpi_expected):
             wp = self.pairs[pid]
+            rpi_desc = f"释放{wp.rpi_expected*100:.0f}%" if wp.rpi_expected > 0.3 else "几乎无释放"
             conds += [
-                Condition(id=f"{pid}_exp", name=f"[Recall] {wp.name}",
-                          params={"pair_id": pid, "mode": "recall", "block": "exp"}),
-                Condition(id=f"{pid}_ctrl", name=f"[Recall-对照] {wp.name}",
-                          params={"pair_id": pid, "mode": "recall", "block": "ctrl"}),
-                Condition(id=f"{pid}_rating", name=f"[Rating] {wp.name}",
-                          params={"pair_id": pid, "mode": "rating"}),
+                Condition(id=f"{pid}_exp", name="Recall",
+                          params={"pair_id": pid, "mode": "recall", "block": "exp",
+                                  "group": pid, "group_label": f"{wp.name}",
+                                  "desc": f"{wp.cat_a_name} → {wp.cat_b_name} (第4轮切换, RPI预期{wp.rpi_expected:.2f})",
+                                  "rpi_expected": wp.rpi_expected}),
+                Condition(id=f"{pid}_ctrl", name="对照",
+                          params={"pair_id": pid, "mode": "recall", "block": "ctrl",
+                                  "group": pid, "group_label": f"{wp.name}",
+                                  "desc": f"全部{wp.cat_a_name}词, 不切换(基线)",
+                                  "rpi_expected": wp.rpi_expected}),
+                Condition(id=f"{pid}_rating", name="Rating",
+                          params={"pair_id": pid, "mode": "rating",
+                                  "group": pid, "group_label": f"{wp.name}",
+                                  "desc": f"AB交替逐词valence评分, 测序列同化/对比偏差",
+                                  "rpi_expected": wp.rpi_expected}),
             ]
         return conds
 

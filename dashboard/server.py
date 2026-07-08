@@ -56,7 +56,7 @@ for _mid, _mod in _MODULES.items():
         params = _c.params if isinstance(_c.params, dict) else {}
         _ALL_CONDITIONS.append({
             "id": _c.id, "name": _c.name, "module_id": _mid,
-            **{k:v for k,v in params.items() if k in ("color","desc","position","composable")}
+            **{k:v for k,v in params.items() if k in ("color","desc","position","composable","group","group_label","rpi_expected","mode","block")}
         })
         _MODULE_MAP[_c.id] = _mid
     # 从 launch config 读 features (兼容旧 get_groups)

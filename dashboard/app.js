@@ -293,8 +293,17 @@ async function renderLaunch() {
 
 // ═══════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════
-// Grouped checklist (for "checklist" composer)
+// Grouped checklist (模块 params 驱动, 分组+描述从条件自带)
 // ═══════════════════════════════════════════════════════
+function toggleMode(mode, val) {
+  document.querySelectorAll('.cond-row input').forEach(c => {
+    const id = c.value;
+    const isRating = id.endsWith('_rating');
+    if (mode === 'rating' && isRating) c.checked = val;
+    if (mode === 'recall' && !isRating) c.checked = val;
+  });
+}
+
 async function renderChecklistPicker() {
   const composer = document.getElementById("task-composer");
   if (composer) composer.style.display = "none";
@@ -303,44 +312,36 @@ async function renderChecklistPicker() {
   const conds = await api(`/api/groups?module=${selMod}`);
   const list = conds.conditions || [];
 
-  // 按 pair_id 分组 (从 condition id 解析: WN_exp → WN)
+  // 按 group 字段分组 (模块提供, 不拆 ID)
   const groups = {};
   for (const c of list) {
-    const p = c.id.lastIndexOf("_");
-    const pair = p > 0 ? c.id.slice(0, p) : c.id;
-    if (!groups[pair]) groups[pair] = { pair, conds: [], rpi: c.rpi_expected };
-    // 从 name 中提取简洁标签
-    const short = c.name.includes("[Recall-对照]") ? "对照"
-      : c.name.includes("[Recall]") ? "Recall"
-      : c.name.includes("[Rating]") ? "Rating" : c.name;
-    groups[pair].conds.push({ ...c, short });
-    // 从第一个条件名提取 pair 名
-    const m = c.name.match(/\]\s+(.+?)\s*\(/);
-    if (m && !groups[pair].label) groups[pair].label = m[1];
+    const gid = c.group || c.id;
+    if (!groups[gid]) groups[gid] = { gid, label: c.group_label || gid, rpi: c.rpi_expected, conds: [] };
+    groups[gid].conds.push(c);
   }
-  const pairs = Object.values(groups);
+  const pairs = Object.values(groups).sort((a, b) => (b.rpi || 0) - (a.rpi || 0));
 
   // 操作栏
   let html = `<div class="checklist-bar">
     <button class="sm" onclick="document.querySelectorAll('.cond-row input').forEach(c=>c.checked=true)">全选</button>
     <button class="sm" onclick="document.querySelectorAll('.cond-row input').forEach(c=>c.checked=false)">清空</button>
-    <button class="sm" onclick="document.querySelectorAll('.cond-row input[id$=_exp],.cond-row input[id$=_ctrl]').forEach(c=>c.checked=true)">全选 Recall</button>
-    <button class="sm" onclick="document.querySelectorAll('.cond-row input[id$=_rating]').forEach(c=>c.checked=true)">全选 Rating</button>
+    <button class="sm" onclick="toggleMode('recall',true)">全选 Recall</button>
+    <button class="sm" onclick="toggleMode('rating',true)">全选 Rating</button>
   </div>`;
-
-  // 按 RPI 降序排列
-  pairs.sort((a, b) => (b.rpi || 0) - (a.rpi || 0));
 
   html += `<div class="checklist-groups">`;
   for (const g of pairs) {
-    const condsHtml = g.conds.map(c =>
-      `<label class="cond-chip"><input type="checkbox" value="${c.id}" id="chk-${c.id}"> ${c.short}</label>`
-    ).join("");
     html += `<div class="cond-row">
-      <span class="cond-pair-label">${g.label || g.pair}</span>
-      ${g.rpi != null ? `<span class="cond-rpi muted">RPI ${g.rpi.toFixed(2)}</span>` : ""}
-      <span class="cond-chips">${condsHtml}</span>
-    </div>`;
+      <div class="cond-pair-info">
+        <span class="cond-pair-label">${g.label}</span>
+        ${g.rpi != null ? `<span class="cond-rpi muted">人类RPI ${g.rpi.toFixed(2)}</span>` : ""}
+      </div>
+      <span class="cond-chips">`;
+    for (const c of g.conds) {
+      html += `<label class="cond-chip" title="${c.desc || c.name}">
+        <input type="checkbox" value="${c.id}"> ${c.name}</label>`;
+    }
+    html += `</span></div>`;
   }
   html += `</div>`;
 
