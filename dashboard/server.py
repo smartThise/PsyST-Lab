@@ -405,8 +405,9 @@ def _launch(body: dict) -> dict:
             except (ValueError, TypeError):
                 pass
 
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    log_fp = open(LOG_FILE, "w")
+    log_file = Path(f"/tmp/psyst_{module_id}.log")
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    log_fp = open(log_file, "w")
     subprocess.Popen(
         args, cwd=str(ROOT), stdout=log_fp, stderr=subprocess.STDOUT,
         start_new_session=True,

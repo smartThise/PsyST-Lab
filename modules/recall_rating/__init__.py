@@ -76,72 +76,91 @@ class RRModule(BaseModule):
         return self._rating_task(wp, rng)
 
     def _recall_task(self, wp, block, rng):
+        """多轮 recall: 逐 trial 呈现→立即回忆, 前轮 context 累积产生 PI."""
         from .tasks import generate_recall_design
         d = generate_recall_design(wp, self._wpt, self._n_ind, rng.randint(0, 100000))
         trials = d.experimental if block == "exp" else d.control
-        study = "\n".join(f"[Trial {t.trial_index}] Study: {', '.join(t.words)}" for t in trials)
-        recs = "\n".join(f"Trial {t.trial_index}:" for t in trials)
-        prompt = f"{'='*50}\n{study}\n{'='*50}\n\nRecall each trial:\n{recs}"
+        turns = []
+        for t in trials:
+            words_str = ", ".join(t.words)
+            turns.append({
+                "user": f"[Trial {t.trial_index}/{len(trials)}] Study these words: {words_str}\nNow recall them exactly. Output only the words, separated by spaces.",
+                "meta": {"trial": t.trial_index, "words": t.words, "cat": t.category},
+            })
         return Task(
-            messages=[{"role": "system", "content": RECALL_SYSTEM}, {"role": "user", "content": prompt}],
-            metadata={"mode": "recall", "pair_id": wp.pair_id, "rpi_expected": wp.rpi_expected,
-                      "trials": [{"trial": t.trial_index, "words": t.words, "cat": t.category} for t in trials]},
+            messages=[{"role": "system", "content": RECALL_SYSTEM}],
+            metadata={
+                "multi_turn": True, "turns": turns,
+                "mode": "recall", "pair_id": wp.pair_id, "rpi_expected": wp.rpi_expected,
+                "trials": [{"trial": t.trial_index, "words": t.words, "cat": t.category} for t in trials],
+            },
         )
 
     def _rating_task(self, wp, rng):
+        """多轮 rating: 逐词呈现→立即评分, 前轮评分在 context 里产生序列依赖."""
         from .tasks import generate_rating_sequence
         seq = generate_rating_sequence(wp, self._n_per, self._dim, True, rng.randint(0, 100000))
-        words = "\n".join(i.word for i in seq.items)
-        prompt = f"Rate each word for {self._dim} (1-100). One integer per line:\n{words}"
+        turns = []
+        for item in seq.items:
+            turns.append({
+                "user": f"Rate this word for {self._dim} (1=lowest, 100=highest). Output ONLY one integer.\nWord: {item.word}",
+                "meta": {"position": item.position, "word": item.word, "category": item.category},
+            })
         return Task(
-            messages=[{"role": "system", "content": RATING_SYSTEM}, {"role": "user", "content": prompt}],
-            metadata={"mode": "rating", "pair_id": wp.pair_id, "words": [i.word for i in seq.items],
-                      "categories": [i.category for i in seq.items]},
+            messages=[{"role": "system", "content": RATING_SYSTEM}],
+            metadata={
+                "multi_turn": True, "turns": turns,
+                "mode": "rating", "pair_id": wp.pair_id,
+                "words": [t["meta"]["word"] for t in turns],
+                "categories": [t["meta"]["category"] for t in turns],
+            },
             overrides={"temperature": 0.7},
         )
 
     def score(self, task: Task, response: str) -> Result:
-        if task.metadata["mode"] == "recall": return self._score_recall(task, response)
-        return self._score_rating(task, response)
+        turn_log = task.metadata.get("turn_log", [])
+        if task.metadata["mode"] == "recall": return self._score_recall(task, turn_log)
+        return self._score_rating(task, turn_log)
 
-    def _score_recall(self, task, response):
+    def _score_recall(self, task, turn_log):
+        """从多轮日志逐 trial 评分."""
         from .metrics import score_recall_trial, score_intrusions
-        trials = task.metadata["trials"]; lines = response.strip().split("\n")
-        trial_resp = {}; cur = None
-        for ln in lines:
-            ln = ln.strip()
-            for t in trials:
-                if ln.lower().startswith(f"trial {t['trial']}"):
-                    cur = t["trial"]; _, _, rest = ln.partition(":"); trial_resp[cur] = rest.strip(); break
-            else:
-                if cur: trial_resp.setdefault(cur, ""); trial_resp[cur] += " " + ln
-        scores = {}; prev = []; accs = []
-        for t in trials:
-            r = trial_resp.get(t["trial"], "")
-            s = score_recall_trial(t["words"], r)
-            i = score_intrusions(t["words"], prev, r)
+        trials = task.metadata["trials"]
+        scores = {}; prev_words = []; accs = []
+        all_responses = []
+        for ti, t in enumerate(trials):
+            resp = turn_log[ti]["response"] if ti < len(turn_log) else ""
+            s = score_recall_trial(t["words"], resp)
+            i = score_intrusions(t["words"], prev_words, resp)
             scores[f"trial{t['trial']}_acc"] = s["accuracy"]
             scores[f"trial{t['trial']}_intr"] = i["n_intrusions"]
-            accs.append(s["accuracy"]); prev.extend(t["words"])
+            accs.append(s["accuracy"]); prev_words.extend(t["words"])
+            all_responses.append({"trial": t["trial"], "words_presented": t["words"],
+                                  "response": resp, "accuracy": s["accuracy"],
+                                  "intrusions": i["n_intrusions"], "intruded": i["intruded_words"]})
         if len(accs) >= 4:
             scores["rpi"] = accs[3] - accs[2]
             scores["pi_slope"] = (accs[0] - accs[2]) / 2.0
         scores["mean_accuracy"] = sum(accs) / len(accs) if accs else 0
-        return Result(condition_id=task.metadata["pair_id"], scores=scores, raw={"response": response})
+        return Result(condition_id=task.metadata["pair_id"], scores=scores,
+                      raw={"turn_log": all_responses})
 
-    def _score_rating(self, task, response):
+    def _score_rating(self, task, turn_log):
+        """从多轮日志逐词提取评分."""
         from .metrics import compute_serial_bias, compute_doG_amplitude
         words = task.metadata["words"]; cats = task.metadata["categories"]
-        lines = [l.strip() for l in response.strip().split("\n") if l.strip()]
         ratings = []
-        for i, ln in enumerate(lines[:len(words)]):
-            nums = re.findall(r"\b(\d+)\b", ln)
+        for ti, entry in enumerate(turn_log):
+            resp = entry["response"]
+            nums = re.findall(r"\b(\d+)\b", resp)
             v = max(1, min(100, int(nums[0]))) if nums else 50
-            ratings.append({"position": i+1, "word": words[i], "category": cats[i], "rating": v})
+            ratings.append({"position": ti+1, "word": words[ti] if ti < len(words) else "?",
+                            "category": cats[ti] if ti < len(cats) else "?", "rating": v,
+                            "response": resp})
         bias = compute_serial_bias(ratings); dog = compute_doG_amplitude(ratings)
         return Result(condition_id=task.metadata["pair_id"], scores={
             "lag1_corr": bias.get("lag1_corr"),
             "assimilation_score": bias.get("assimilation_score"),
             "direction_tag": 1.0 if bias.get("direction") == "assimilation" else (-1.0 if bias.get("direction") == "contrast" else 0.0),
             "doG_A": dog.get("A"), "doG_half_amp": dog.get("half_amplitude"),
-        }, raw={"response": response})
+        }, raw={"ratings": ratings})

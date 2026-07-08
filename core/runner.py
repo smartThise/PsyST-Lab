@@ -41,6 +41,26 @@ class ExperimentRunner:
             extra_body=cfg.get("extra_body"),
         )
 
+    def _run_multi_turn(self, task, temperature, max_tokens):
+        """多轮对话: 逐轮调 API, 累积 context, 返回最终 response + 逐轮日志."""
+        messages = [task.messages[0]]  # system
+        turn_specs = task.metadata["turns"]  # [{user, meta}, ...]
+        turn_log = []
+        final_response = ""
+
+        for ti, t in enumerate(turn_specs):
+            messages.append({"role": "user", "content": t["user"]})
+            resp = self.client.chat(messages, temperature=temperature, max_tokens=max_tokens)
+            messages.append({"role": "assistant", "content": resp})
+            entry = {"turn": ti, "user": t["user"], "response": resp}
+            if "meta" in t:
+                entry["meta"] = t["meta"]
+            turn_log.append(entry)
+            final_response = resp
+            time.sleep(0.05)
+
+        return final_response, turn_log
+
     # ------------------------------------------------------------------
     # 主入口
     # ------------------------------------------------------------------
@@ -107,12 +127,18 @@ class ExperimentRunner:
                 for rep in range(k_repeats):
                     temp = task.overrides.get("temperature", self.client.temperature)
                     mtok = task.overrides.get("max_tokens", self.client.max_tokens)
-                    response = self.client.chat(task.messages, temperature=temp, max_tokens=mtok)
+
+                    # --- 多轮对话 ---
+                    if task.metadata.get("multi_turn"):
+                        response, turn_log = self._run_multi_turn(task, temp, mtok)
+                        task.metadata["turn_log"] = turn_log
+                    else:
+                        response = self.client.chat(task.messages, temperature=temp, max_tokens=mtok)
 
                     result = self.module.score(task, response)
                     done += 1
 
-                    # 写入结果
+                    # 写入结果 (含多轮日志)
                     record = {
                         "module_id": self.module.module_id,
                         "condition_id": result.condition_id,
@@ -121,6 +147,8 @@ class ExperimentRunner:
                         "scores": result.scores,
                         "raw": result.raw,
                     }
+                    if task.metadata.get("turn_log"):
+                        record["turn_log"] = task.metadata["turn_log"]
                     append_jsonl(self._run_dir / "results.jsonl", record)
                     all_results.append(result)
 
