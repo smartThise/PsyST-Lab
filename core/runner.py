@@ -103,7 +103,7 @@ class ExperimentRunner:
         self._tag = make_run_tag()
         self._run_dir = RUNS_DIR / self.module.module_id / self._tag
         self._run_dir.mkdir(parents=True, exist_ok=True)
-        print(f"[{self.module.module_id}] run {self._tag}: {n_cond}条件 × {n_trials}trials × {k_repeats}repeats, seed={seed}", flush=True)
+        print(f"[{self.module.module_id}] run {self._tag}: {len(conditions)}条件 × {n_trials}trials × {k_repeats}repeats, seed={seed}", flush=True)
 
         # 保存 run config
         save_json(self._run_dir / "run_config.json", {
