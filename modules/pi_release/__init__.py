@@ -24,6 +24,7 @@ register_launch("pi_release", LaunchConfig(
         {"key": "updates_per_key", "label": "Updates/Key", "type": "int", "default": 4},
         {"key": "n_trials", "label": "试次数", "type": "int", "default": 10},
         {"key": "k_repeats", "label": "K Repeats", "type": "int", "default": 3},
+        {"key": "seed", "label": "Seed", "type": "int", "default": 42},
     ],
     features=groups.GROUP_META,  # [{id,name,desc,color,position,composable}]
 ))

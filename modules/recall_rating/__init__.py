@@ -21,6 +21,7 @@ register_launch("recall_rating", LaunchConfig(
     extra_params=[
         {"key": "n_trials", "label": "试次数", "type": "int", "default": 1},
         {"key": "k_repeats", "label": "K Repeats", "type": "int", "default": 1},
+        {"key": "seed", "label": "Seed", "type": "int", "default": 42},
     ],
 ))
 
