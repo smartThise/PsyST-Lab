@@ -292,15 +292,58 @@ async function renderLaunch() {
 }
 
 // ═══════════════════════════════════════════════════════
-// Checkbox picker (for "checklist" composer)
+// ═══════════════════════════════════════════════════════
+// Grouped checklist (for "checklist" composer)
 // ═══════════════════════════════════════════════════════
 async function renderChecklistPicker() {
-  // Hide drag-specific UI
   const composer = document.getElementById("task-composer");
   if (composer) composer.style.display = "none";
   $("add-task") && ($("add-task").style.display = "none");
 
-  // Build checkbox grid
+  const conds = await api(`/api/groups?module=${selMod}`);
+  const list = conds.conditions || [];
+
+  // 按 pair_id 分组 (从 condition id 解析: WN_exp → WN)
+  const groups = {};
+  for (const c of list) {
+    const p = c.id.lastIndexOf("_");
+    const pair = p > 0 ? c.id.slice(0, p) : c.id;
+    if (!groups[pair]) groups[pair] = { pair, conds: [], rpi: c.rpi_expected };
+    // 从 name 中提取简洁标签
+    const short = c.name.includes("[Recall-对照]") ? "对照"
+      : c.name.includes("[Recall]") ? "Recall"
+      : c.name.includes("[Rating]") ? "Rating" : c.name;
+    groups[pair].conds.push({ ...c, short });
+    // 从第一个条件名提取 pair 名
+    const m = c.name.match(/\]\s+(.+?)\s*\(/);
+    if (m && !groups[pair].label) groups[pair].label = m[1];
+  }
+  const pairs = Object.values(groups);
+
+  // 操作栏
+  let html = `<div class="checklist-bar">
+    <button class="sm" onclick="document.querySelectorAll('.cond-row input').forEach(c=>c.checked=true)">全选</button>
+    <button class="sm" onclick="document.querySelectorAll('.cond-row input').forEach(c=>c.checked=false)">清空</button>
+    <button class="sm" onclick="document.querySelectorAll('.cond-row input[id$=_exp],.cond-row input[id$=_ctrl]').forEach(c=>c.checked=true)">全选 Recall</button>
+    <button class="sm" onclick="document.querySelectorAll('.cond-row input[id$=_rating]').forEach(c=>c.checked=true)">全选 Rating</button>
+  </div>`;
+
+  // 按 RPI 降序排列
+  pairs.sort((a, b) => (b.rpi || 0) - (a.rpi || 0));
+
+  html += `<div class="checklist-groups">`;
+  for (const g of pairs) {
+    const condsHtml = g.conds.map(c =>
+      `<label class="cond-chip"><input type="checkbox" value="${c.id}" id="chk-${c.id}"> ${c.short}</label>`
+    ).join("");
+    html += `<div class="cond-row">
+      <span class="cond-pair-label">${g.label || g.pair}</span>
+      ${g.rpi != null ? `<span class="cond-rpi muted">RPI ${g.rpi.toFixed(2)}</span>` : ""}
+      <span class="cond-chips">${condsHtml}</span>
+    </div>`;
+  }
+  html += `</div>`;
+
   let grid = $("launch-conds");
   if (!grid) {
     grid = document.createElement("div"); grid.id = "launch-conds";
@@ -308,11 +351,7 @@ async function renderChecklistPicker() {
     const form = document.querySelector(".form-groups") || $("tab-launch");
     form?.appendChild(grid);
   }
-  const conds = await api(`/api/groups?module=${selMod}`);
-  const list = conds.conditions || [];
-  grid.innerHTML = list.map(c =>
-    `<label class="cond-chip"><input type="checkbox" value="${c.id}"> ${c.name}</label>`
-  ).join("");
+  grid.innerHTML = html;
 }
 
 // ═══════════════════════════════════════════════════════
