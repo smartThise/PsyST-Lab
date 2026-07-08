@@ -1,12 +1,4 @@
-"""OpenAI-compatible chat client with exponential backoff.
-
-Works with DMXAPI, DeepSeek, OpenRouter, or any endpoint exposing
-POST /chat/completions.
-
-Vendor-specific knobs (e.g. DeepSeek's `thinking: {type: none}` to disable
-reasoning) are passed through via `extra_body`, which is merged into the
-request payload on every call.
-"""
+"""OpenAI 兼容 API client — 支持单轮和多轮对话."""
 from __future__ import annotations
 
 import time
@@ -38,16 +30,28 @@ class APIClient:
         self.max_tokens = max_tokens
         self.max_retries = max_retries
         self.timeout = timeout
-        # Merged into every payload. Use for vendor params like
-        # {"thinking": {"type": "none"}} (DeepSeek) to disable reasoning.
         self.extra_body = extra_body or {}
 
-    def chat(self, user_message: str, temperature: float | None = None,
-             max_tokens: int | None = None) -> str:
-        """Send a single-turn user message, return the assistant text."""
+    def chat(
+        self,
+        messages: list[dict[str, str]] | str,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """发送消息, 返回 assistant content.
+
+        Args:
+            messages: 消息列表 [{"role":"user","content":"..."}]
+                      或单条字符串 (自动包装为 user message)
+            temperature: 覆盖默认 temperature
+            max_tokens: 覆盖默认 max_tokens
+        """
+        if isinstance(messages, str):
+            messages = [{"role": "user", "content": messages}]
+
         payload: dict[str, Any] = {
             "model": self.model,
-            "messages": [{"role": "user", "content": user_message}],
+            "messages": messages,
             "temperature": self.temperature if temperature is None else temperature,
             "max_tokens": self.max_tokens if max_tokens is None else max_tokens,
         }
@@ -70,7 +74,7 @@ class APIClient:
                 resp.raise_for_status()
                 data = resp.json()
                 return data["choices"][0]["message"]["content"].strip()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
                     break

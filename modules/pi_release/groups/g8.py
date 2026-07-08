@@ -2,7 +2,7 @@
 values, END-positioned. POSITION='end' so composing it into a task places it
 before the query (not mid-stream). Not a fair release technique — ablation only."""
 from ._common import assemble, hackreset_injection
-from pi_test import PITest
+from ..pi_test import PITest
 
 ID = "G8"
 NAME = "hackreset"

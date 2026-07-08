@@ -8,7 +8,7 @@ retrieval. If accuracy stays at baseline, the model ignores wrong prefill and
 keeps trying to retrieve (a different finding).
 """
 from ._common import assemble, hackreset_injection
-from pi_test import PITest
+from ..pi_test import PITest
 
 ID = "G9"
 NAME = "hackreset-wrong"

@@ -1,6 +1,6 @@
 """G1 semantic-forget: NL cue to ignore priors. Composable mid-stream feature."""
 from ._common import assemble_midstream, SEMANTIC_FORGET
-from pi_test import PITest
+from ..pi_test import PITest
 
 ID = "G1"
 NAME = "semantic-forget"

@@ -17,13 +17,7 @@ import pkgutil
 import sys
 from pathlib import Path
 
-# make sibling src/ modules (pi_test, utils, ...) importable when this package
-# is imported from outside the runner (e.g. by the dashboard server).
-_SRC = str(Path(__file__).resolve().parent.parent)
-if _SRC not in sys.path:
-    sys.path.insert(0, _SRC)
-
-from pi_test import PITest  # noqa: E402
+from ..pi_test import PITest
 
 REGISTRY: dict[str, callable] = {}
 FEATURES: dict[str, callable] = {}

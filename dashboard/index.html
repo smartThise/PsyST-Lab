@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PI 释放实验 · 控制台</title>
+<title>PsyST Lab</title>
 <link rel="stylesheet" href="/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <h1>PI 释放实验</h1>
-    <span class="subtitle">基于 <a style="color:inherit" href="https://arxiv.org/abs/2506.08184" target="_blank" rel="noopener">arXiv:2506.08184</a></span>
+    <h1>PsyST Lab</h1>
+    <select id="mod-sel" class="mod-sel"></select>
   </div>
   <nav class="tabs">
     <button class="tab active" data-tab="live">实时</button>
@@ -54,22 +54,12 @@
         <span id="meta-pi" class="chip"></span>
         <span id="meta-calls" class="chip"></span>
       </div>
-      <section class="kpis">
-        <div class="kpi"><span class="label">基线准确率(G0)</span><span id="kpi-baseline" class="value">—</span></div>
-        <div class="kpi accent"><span class="label">最佳 RE</span><span id="kpi-best-re" class="value">—</span></div>
-        <div class="kpi"><span class="label">最佳组别</span><span id="kpi-best-group" class="value">—</span></div>
-        <div class="kpi"><span class="label">平均 CP</span><span id="kpi-cp" class="value">—</span></div>
-      </section>
-      <section class="grid">
-        <div class="chart-card"><header><h3>释放效率 vs 准确率</h3></header><canvas id="chart-main" height="120"></canvas></div>
-        <div class="chart-card"><header><h3>上下文保全 & 鲁棒性</h3></header><canvas id="chart-cp" height="120"></canvas></div>
-      </section>
-      <section class="table-card">
-        <header><h3>各组详情</h3></header>
-        <table id="detail-table">
-          <thead><tr><th>编号</th><th>名称</th><th>准确率</th><th>RE</th><th>CP</th><th>鲁棒性Δ</th><th>调用数</th></tr></thead>
-          <tbody></tbody>
-        </table>
+      <div id="sort-bar" class="sort-bar" style="display:none"><span class="muted small">排序:</span><span id="sort-chips"></span><button class="sm" onclick="sortQueue=[];renderAll();">✕ 清除</button><button class="sm" onclick="exportCSV()" title="导出 CSV">⬇ 导出</button></div>
+      <section class="kpis" id="kpi-row"></section>
+      <section class="grid" id="chart-grid"></section>
+      <section class="table-card" id="table-section">
+        <header><h3 id="table-title">详情</h3></header>
+        <div class="table-wrap"><table id="detail-table"><thead></thead><tbody></tbody></table></div>
       </section>
     </div>
   </section>
@@ -81,7 +71,7 @@
       <div id="compare-picker" class="compare-picker"></div>
     </div>
     <div class="chart-card">
-      <header><h3>横向对比(每格 = accuracy)</h3><span class="muted small"><label><input type="checkbox" id="compare-re"> 显示 RE</label></span></header>
+      <header><h3>横向对比(每格 = accuracy)</h3><span class="muted small"><label><input type="checkbox" id="compare-re" onchange="renderCompareTable()"> 显示 RE</label> <button class="sm" onclick="exportCompareCSV()">⬇ 导出 CSV</button></span></header>
       <div class="table-wrap"><table id="compare-table" class="compare-table"></table></div>
     </div>
   </section>
@@ -100,7 +90,7 @@
       <div class="profile-info" id="f-profile-info"></div>
       <div class="form-groups">
         <div class="form-groups-head">
-          <span class="muted small">拖 feature 到任务框组成任务;空任务 = 基线。多任务并行对比,<b>顺序敏感</b>(G1+G2 ≠ G2+G1)。无基线任务时后端自动补 G0。</span>
+          <span id="launch-desc" class="muted small"></span>
         </div>
         <div id="task-composer">
           <div class="palette">
@@ -145,7 +135,7 @@
   </section>
 </main>
 
-<footer class="small">pi-release-exp · 数据来自本地 runs/ · 组定义在 src/groups/ 包里</footer>
+<footer class="small">PsyST Lab · runs/<span id="footer-module">pi_release</span>/</footer>
 <script src="/app.js"></script>
 </body>
 </html>

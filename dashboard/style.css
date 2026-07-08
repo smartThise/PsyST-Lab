@@ -58,6 +58,13 @@ html, body {
   z-index: 10;
 }
 .brand { display: flex; align-items: baseline; gap: 12px; }
+.mod-sel {
+  padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--card); font-size: 13px; color: var(--text); cursor: pointer;
+  min-width: 180px; font-family: inherit;
+}
+.mod-sel:hover { border-color: var(--accent); }
+.mod-sel:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
 .brand h1 {
   margin: 0;
   font-size: 17px;
@@ -228,6 +235,10 @@ th {
 thead tr:first-child th:first-child { border-top-left-radius: var(--radius-sm); }
 thead tr:first-child th:last-child { border-top-right-radius: var(--radius-sm); }
 tbody tr:last-child td { border-bottom: none; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--accent); background: var(--accent-soft); }
+.sort-hint { font-size: 11px; color: var(--muted); }
+.sort-hint:hover { color: var(--accent); }
 tbody tr:hover { background: var(--card-hover); }
 td.num { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; }
 
@@ -480,6 +491,29 @@ button.primary:disabled { background: var(--muted-2); cursor: not-allowed; }
 .chip-in-task .chip-x:hover { opacity: 1; }
 button.ghost { background: transparent; border: 1px solid #d9dee4; color: #57606a; border-radius: 5px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
 button.ghost:hover { background: #fafbfc; }
+
+/* checklist picker */
+.cond-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; max-height: 400px; overflow-y: auto; padding: 4px 0; }
+.cond-chip { display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 12px; background: var(--card); }
+.cond-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.cond-chip:has(input:checked) { background: var(--accent); color: #fff; border-color: var(--accent); }
+.cond-chip input { display: none; }
+
+/* profiles */
+.settings-profiles { margin-bottom: 12px; }
+.profile-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light); font-size: 12px; }
+.profile-acts { display: flex; gap: 4px; flex-shrink: 0; }
+
+/* sort bar */
+.sort-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  margin-bottom: 12px; flex-wrap: wrap; box-shadow: var(--shadow); }
+.sort-chip { cursor: pointer; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+  background: var(--accent-soft); color: var(--accent); font-size: 12px; }
+.sort-chip:hover { background: #b6e3ff; }
+.sort-idx { display: inline-block; font-size: 10px; font-weight: 700; color: var(--accent);
+  background: var(--accent-soft); border-radius: 3px; padding: 1px 4px; margin-left: 4px;
+  vertical-align: middle; }
 button.tiny { padding: 2px 7px; font-size: 11px; }
 .live-actions { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
 button.danger { background: #cf222e; color: #fff; border: 1px solid #cf222e; border-radius: 5px; padding: 6px 12px; font-size: 13px; cursor: pointer; }

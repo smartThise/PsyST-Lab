@@ -1,6 +1,6 @@
 """G3 syntactic cliff: structural close symbols. Composable mid-stream feature."""
 from ._common import assemble_midstream, STRUCTURAL_CLIFF, SYMBOL_WALL
-from pi_test import PITest
+from ..pi_test import PITest
 
 ID = "G3"
 NAME = "syntactic-cliff"

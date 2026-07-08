@@ -1,6 +1,6 @@
 """G6 self-generation cue: disruption-token instruction. Composable mid-stream feature."""
 from ._common import assemble_midstream, SELF_GEN_CUE
-from pi_test import PITest
+from ..pi_test import PITest
 
 ID = "G6"
 NAME = "self-generation"

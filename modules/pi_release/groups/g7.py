@@ -1,6 +1,6 @@
 """G7 query-engineering cue: recency-anchored instruction. Composable mid-stream feature."""
 from ._common import assemble_midstream, ENGINEERED_CUE
-from pi_test import PITest
+from ..pi_test import PITest
 
 ID = "G7"
 NAME = "query-engineering"

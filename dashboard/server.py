@@ -42,51 +42,118 @@ DASH_DIR = Path(__file__).resolve().parent
 LOG_FILE = Path("/tmp/pi_run.log")
 HOST, PORT = "127.0.0.1", 8765
 
-# groups the launch form can pick from (id, name, description for the UI)
-# Groups are auto-discovered from src/groups/*.py — drop a new file there
-# and it appears here, in the registry, and the launch UI with no other edit.
-sys.path.insert(0, str(ROOT / "src"))
-import groups as _groups_mod  # noqa: E402
-GROUP_INFO = _groups_mod.GROUP_META
-KNOWN_GROUPS = _groups_mod.KNOWN_GROUPS
+# ---- 模块系统 ----
+sys.path.insert(0, str(ROOT))
+from core.registry import discover_modules, list_modules as _list_mods  # noqa: E402
+_MODULES = discover_modules()
+
+# 收集所有模块的条件 (供 launch form) + 分组元数据 (供 task composer)
+_ALL_CONDITIONS: list[dict] = []
+_MODULE_GROUPS: dict[str, list[dict]] = {}  # module_id -> old-style group list
+_MODULE_MAP: dict[str, str] = {}  # condition_id -> module_id
+for _mid, _mod in _MODULES.items():
+    for _c in _mod.build_conditions():
+        params = _c.params if isinstance(_c.params, dict) else {}
+        _ALL_CONDITIONS.append({
+            "id": _c.id, "name": _c.name, "module_id": _mid,
+            **{k:v for k,v in params.items() if k in ("color","desc","position","composable")}
+        })
+        _MODULE_MAP[_c.id] = _mid
+    # 从 launch config 读 features (兼容旧 get_groups)
+    spec = _mod.get_spec() if hasattr(_mod, "get_spec") else {}
+    launch = spec.get("launch") or {}
+    _MODULE_GROUPS[_mid] = launch.get("features", [])
 
 
-# ----------------------------- data helpers -----------------------------
+# ---- 数据 (兼容旧 runs/<tag>/ 和 新 runs/<module>/<tag>/ 两种格式) ----
+def _normalize_summary(data: dict, run_dir: str = "") -> dict:
+    """统一新旧格式。旧格式(PI release)自动补 module_id, 映射 groups→conditions."""
+    if "module_id" in data:
+        return data  # 新格式
+    # 旧 PI release 格式
+    groups = data.get("groups", [])
+    conditions = []
+    for g in groups:
+        conditions.append({
+            "condition_id": g.get("id", g.get("name", "?")),
+            "condition_name": g.get("name", g.get("id", "?")),
+            "accuracy": g.get("accuracy"),
+            "re": g.get("re"),
+            "cp": g.get("cp"),
+            "robustness_delta": g.get("robustness_delta"),
+            "n": g.get("n_calls", g.get("n_trials", 0)),
+        })
+    return {
+        "module_id": "pi_release",
+        "module_name": "PI Release 实验",
+        "tag": data.get("tag", Path(run_dir).name if run_dir else ""),
+        "model": data.get("model", "?"),
+        "baseline_acc": data.get("baseline_acc"),
+        "pi_test": data.get("pi_test", {}),
+        "conditions": conditions,
+        "n_trials": (data.get("pi_test") or {}).get("n_trials", 0),
+        "k_repeats": (data.get("eval") or {}).get("k_repeats", 0),
+        "_legacy": True,
+    }
+
 
 def _list_runs() -> list[dict]:
     out = []
     if not RUNS_DIR.exists():
         return out
-    for d in sorted(RUNS_DIR.iterdir(), reverse=True):
-        if not d.is_dir():
-            continue
-        s = d / "summary.json"
-        if not s.exists():
-            continue
-        try:
-            data = json.loads(s.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        out.append({
-            "tag": data.get("tag", d.name),
-            "model": data.get("model", "?"),
-            "baseline_acc": data.get("baseline_acc"),
-            "n_groups": len(data.get("groups", [])),
-            "n_calls": sum(g.get("n_calls", 0) for g in data.get("groups", [])),
-            "pi_test": data.get("pi_test", {}),
-        })
+
+    def _collect(base: Path, module_id: str):
+        for run_dir in sorted(base.iterdir(), reverse=True):
+            if not run_dir.is_dir() or run_dir.name.startswith("."):
+                continue
+            s = run_dir / "summary.json"
+            if not s.exists():
+                continue
+            try:
+                data = json.loads(s.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            data = _normalize_summary(data, str(run_dir))
+            data.setdefault("module_id", module_id)
+            out.append({
+                "tag": data.get("tag", run_dir.name),
+                "module_id": data.get("module_id", module_id),
+                "module_name": data.get("module_name", ""),
+                "model": data.get("model", "?"),
+                "baseline_acc": data.get("baseline_acc"),
+                "n_conditions": len(data.get("conditions", [])),
+                "n_calls": sum(c.get("n", 0) for c in data.get("conditions", [])),
+                "run_dir": str(run_dir.relative_to(ROOT)),
+            })
+
+    # 新格式: runs/<module_id>/<tag>/
+    for mod_dir in sorted(RUNS_DIR.iterdir()):
+        if mod_dir.is_dir() and not mod_dir.name.startswith("."):
+            _collect(mod_dir, mod_dir.name)
+
+    # 旧格式: runs/<tag>/ (direct)
+    for d in sorted(RUNS_DIR.iterdir()):
+        if d.is_dir() and not d.name.startswith(".") and (d / "summary.json").exists():
+            # 检查是否已被新格式覆盖
+            already = any(str(d.relative_to(ROOT)).startswith(str(md.relative_to(ROOT)))
+                         for md in RUNS_DIR.iterdir() if md.is_dir() and md != d)
+            if not already:
+                _collect(RUNS_DIR, "pi_release")
+                break  # only scan once for legacy dirs
+
     return out
 
 
-def _load_summary(tag: str) -> dict | None:
-    p = RUNS_DIR / tag / "summary.json"
+def _load_summary(run_dir: str) -> dict | None:
+    p = ROOT / run_dir / "summary.json"
     if not p.exists():
         return None
-    return json.loads(p.read_text(encoding="utf-8"))
+    data = json.loads(p.read_text(encoding="utf-8"))
+    return _normalize_summary(data, run_dir)
 
 
-def _load_results(tag: str, limit: int = 2000) -> list[dict]:
-    p = RUNS_DIR / tag / "results.jsonl"
+def _load_results(run_dir: str, limit: int = 2000) -> list[dict]:
+    p = ROOT / run_dir / "results.jsonl"
     if not p.exists():
         return []
     rows = []
@@ -107,12 +174,7 @@ def _load_results(tag: str, limit: int = 2000) -> list[dict]:
 # ----------------------------- live status -----------------------------
 
 def _find_runner_pids() -> list[str]:
-    """PIDs of live run_all.py processes (run by python), excluding zombies.
-
-    Must require BOTH 'python' and 'run_all.py' in the command — otherwise the
-    Claude Code native binary (which carries 'run_all.py' in its session args)
-    gets false-matched and blocks every launch.
-    """
+    """PIDs of live launch.py processes."""
     try:
         out = subprocess.run(
             ["ps", "-eo", "pid=,stat=,command="], capture_output=True, text=True, timeout=2
@@ -131,7 +193,7 @@ def _find_runner_pids() -> list[str]:
         if "Z" in stat:  # zombie / defunct — already dead
             continue
         low = cmd.lower()
-        if "run_all.py" in cmd and "python" in low:
+        if "launch.py" in cmd and "python" in low:
             pids.append(pid)
     return pids
 
@@ -178,7 +240,7 @@ def _status() -> dict:
 
 
 def _force_stop() -> dict:
-    """Force-kill any running run_all.py and delete the newest (incomplete) run dir."""
+    """Force-kill any running launch.py and delete the newest (incomplete) run dir."""
     pids = _find_runner_pids()
     killed = []
     for pid in pids:
@@ -205,13 +267,25 @@ def _compare(tags: list[str]) -> dict:
     out = {}
     for tag in tags:
         s = _load_summary(tag)
-        if s is None:
-            continue
+        if s is None: continue
+        # 兼容新旧格式: conditions (新) 或 groups (旧)
+        items = s.get("conditions") or s.get("groups") or []
+        groups = {}
+        for g in items:
+            gid = g.get("condition_id") or g.get("id") or "?"
+            groups[gid] = {
+                "id": gid,
+                "accuracy": g.get("accuracy"),
+                "re": g.get("re"),
+                "cp": g.get("cp"),
+                "robustness_delta": g.get("robustness_delta"),
+            }
         out[tag] = {
-            "tag": tag, "model": s.get("model"),
+            "tag": s.get("tag", tag.split("/")[-1]),
+            "model": s.get("model"),
             "baseline_acc": s.get("baseline_acc"),
             "pi_test": s.get("pi_test", {}),
-            "groups": {g["id"]: g for g in s.get("groups", [])},
+            "groups": groups,
         }
     return out
 
@@ -272,7 +346,7 @@ def _seed_profiles_from_config() -> None:
 
 def _apply_profile_to_config(profile: dict) -> None:
     """Write the chosen profile's base_url/api_key/model into config.yaml so
-    run_all.py (which reads config.yaml) uses them. Preserves other fields
+    launch.py (which reads config.yaml) uses them. Preserves other fields
     like extra_body; comments are lost on rewrite."""
     CONFIG_YAML.parent.mkdir(parents=True, exist_ok=True)
     data = {}
@@ -301,14 +375,11 @@ def _launch(body: dict) -> dict:
     if _find_runner_pids():
         return {"launched": False, "error": "已有 run 在跑,请等它结束"}
 
-    _groups_mod.discover()  # pick up any group file added since startup
-
     # resolve profile -> write into config.yaml
     profiles = _load_profiles()
     pname = body.get("profile")
     profile = next((p for p in profiles if p["name"] == pname), None)
     if profile is None:
-        # fall back to whatever's in config.yaml
         profile = {"name": "(current config)", "base_url": None, "api_key": None, "model": None}
     else:
         _apply_profile_to_config(profile)
@@ -317,27 +388,16 @@ def _launch(body: dict) -> dict:
     if not Path(py).exists():
         py = sys.executable
 
-    tasks = body.get("tasks")
-    if tasks:
-        # write the task list to a pending file the subprocess reads
-        tasks_file = ROOT / "runs" / ".tasks_pending.json"
-        tasks_file.parent.mkdir(parents=True, exist_ok=True)
-        tasks_file.write_text(json.dumps(tasks), encoding="utf-8")
-        args = [py, str(ROOT / "scripts" / "run_all.py"), "--tasks-file", str(tasks_file)]
-        selected = [t.get("id") or "+".join(t.get("features", [])) or "G0" for t in tasks]
-    else:
-        groups = [g for g in body.get("groups", []) if g in KNOWN_GROUPS]
-        if not groups:
-            return {"launched": False, "error": "no valid groups/tasks selected"}
-        args = [py, str(ROOT / "scripts" / "run_all.py"), "--groups"] + groups
-        selected = groups
-    # NOTE: do NOT auto-add G0 — the runner reuses a historical G0 baseline
-    # if config matches, and only runs G0 when no match exists.
+    module_id = body.get("module_id", "pi_release")
+    conditions = body.get("conditions", [])
+    if not conditions:
+        return {"launched": False, "error": "no conditions selected"}
+
+    args = [py, str(ROOT / "launch.py"), "--module", module_id, "--conditions"] + conditions
 
     if profile.get("model"):
         args += ["--model", str(profile["model"])]
-    for key, cli in [("n_keys", "--n-keys"), ("updates_per_key", "--updates"),
-                     ("n_trials", "--trials"), ("k_repeats", "--k-repeats")]:
+    for key, cli in [("n_trials", "--trials"), ("k_repeats", "--repeats")]:
         v = body.get(key)
         if v is not None and v != "":
             try:
@@ -352,7 +412,8 @@ def _launch(body: dict) -> dict:
         start_new_session=True,
     )
     return {"launched": True, "profile": profile.get("name"),
-            "model": profile.get("model"), "groups": selected}
+            "model": profile.get("model"), "module_id": module_id,
+            "conditions": conditions}
 
 
 # ----------------------------- handler -----------------------------
@@ -397,9 +458,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, _list_runs())
         elif p == "/api/status":
             self._send_json(200, _status())
+        elif p == "/api/modules":
+            self._send_json(200, _list_mods())
+        elif p.startswith("/api/spec/"):
+            mid = p.split("/")[-1]
+            mod = _MODULES.get(mid)
+            if mod:
+                self._send_json(200, mod.get_spec())
+            else:
+                self._send_json(404, {"error": f"module {mid} not found"})
         elif p == "/api/groups":
-            _groups_mod.discover()  # re-scan src/groups/ for newly added files
-            self._send_json(200, {"groups": _groups_mod.GROUP_META})
+            mid = qs.get("module", [""])[0] or "pi_release"
+            conds = [c for c in _ALL_CONDITIONS if c["module_id"] == mid] if mid else _ALL_CONDITIONS
+            groups = _MODULE_GROUPS.get(mid, [])
+            self._send_json(200, {"groups": groups, "conditions": conds, "modules": _list_mods()})
         elif p == "/api/profiles":
             profiles = [{**p, "api_key": _mask_key(p.get("api_key"))}
                         for p in _load_profiles()]
@@ -409,11 +481,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, _compare(tags))
         elif p.startswith("/api/run/"):
             parts = p.rstrip("/").split("/")
-            tag = parts[3] if len(parts) > 3 else ""
-            if len(parts) >= 5 and parts[4] == "results":
-                self._send_json(200, _load_results(tag))
+            # runs/<module_id>/<tag> → parts[3]=module_id, parts[4]=tag
+            run_dir_parts = parts[3:]
+            run_path = "/".join(run_dir_parts)
+            if p.endswith("/results"):
+                run_path = "/".join(run_dir_parts[:-1])
+                self._send_json(200, _load_results(run_path))
             else:
-                s = _load_summary(tag)
+                s = _load_summary(run_path)
                 self._send_json(200, s if s else {"error": "run not found"})
         else:
             self._send(404, b"Not found", "text/plain")
@@ -473,7 +548,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main(open_browser: bool = True):
-    # auto-reap spawned run_all.py children so they don't linger as zombies
+    # auto-reap spawned launch.py children so they don't linger as zombies
     # (a zombie would still match the running-process check and block launches)
     import signal
     try:

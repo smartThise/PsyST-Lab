@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from statistics import mean
 
-from pi_test import PITest
+from .pi_test import PITest
 
 
 # --------------------------------------------------------------------------

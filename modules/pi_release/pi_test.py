@@ -12,7 +12,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
-from utils import DATA_DIR
+from pathlib import Path; DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
 @dataclass

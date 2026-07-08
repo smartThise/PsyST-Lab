@@ -1,6 +1,6 @@
 """G5 unicode/control bytes: real RTL/zero-width/null/combining chars. Composable feature."""
 from ._common import assemble_midstream, _unicode_payload
-from pi_test import PITest
+from ..pi_test import PITest
 
 ID = "G5"
 NAME = "unicode-bytes"

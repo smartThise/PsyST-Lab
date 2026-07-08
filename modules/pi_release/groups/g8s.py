@@ -13,7 +13,7 @@ paper instead:
 The paper's lift (when it appears) comes from the boundary making the model treat
 pre-boundary input as a closed task and focus on the trailing batch -- NOT from
 the injected values. So G8s is the honest test of the paper's mechanism."""
-from pi_test import PITest, build_base_query
+from ..pi_test import PITest, build_base_query
 
 ID = "G8s"
 NAME = "hackreset-paper"
@@ -25,7 +25,7 @@ def _snapshot_at_cut(test: PITest) -> dict:
     """Each key's most recent value seen before the injection cut (len-tail).
     Uses the same _default_tail_updates as assemble_midstream, so the snapshot
     matches the actual injection position."""
-    from groups._common import _default_tail_updates
+    from ._common import _default_tail_updates
     n = len(test.updates)
     cut = n - min(_default_tail_updates(len(test.keys)), n - 1)
     snap: dict = {}
@@ -35,7 +35,7 @@ def _snapshot_at_cut(test: PITest) -> dict:
 
 
 def feature(test: PITest, seed: int = 0) -> str:
-    from groups._common import paper_instruction
+    from ._common import paper_instruction
     NL = chr(10)
     snap = _snapshot_at_cut(test)
     current = NL.join(f"The current value of {k} is {v}." for k, v in snap.items())
@@ -53,5 +53,5 @@ def feature(test: PITest, seed: int = 0) -> str:
 
 
 def build(test: PITest, seed: int = 0) -> str:
-    from groups._common import assemble_midstream
+    from ._common import assemble_midstream
     return assemble_midstream(test, injection=feature(test, seed))

@@ -1,0 +1,165 @@
+{
+  "_meta": {
+    "description": "12 category pairs from Wickens (1970) and colleagues, extracted from Mewhort, Shabahang & Franklin (2018, Psychon Bull Rev) Appendix. Each pair was used in the classic Release from PI paradigm. RPI values = observed release size (0=none, 1=full).",
+    "paper": "Mewhort, Shabahang & Franklin (2018). Release from PI: An analysis and a model. Psychonomic Bulletin & Review, 25, 932-950.",
+    "usage": "For each pair: cat_a = induction category, cat_b = release category. Recall mode: 3 trials of cat_a words, then 1 trial of cat_b (experimental) or cat_a (control). Rating mode: sequential single-word rating interleaving both categories."
+  },
+  "pairs": {
+    "NP": {
+      "name": "Number of Phonemes",
+      "source": "Baldwin & Wickens (1974)",
+      "rpi": 0.19,
+      "cat_a": {
+        "name": "2-3 phonemes",
+        "words": ["dumb","hay","eel","log","toe","day","edge","fog","ear","odd","debt","ash","inch","bee","dish","peg","lid","hip","niche"]
+      },
+      "cat_b": {
+        "name": "4-5 phonemes",
+        "words": ["smart","field","shark","branch","wrist","month","fringe","breeze","throat","freak","thrift","slag","splint","finch","ditch","sleet","skiff","disc","twig","sheep"]
+      }
+    },
+    "NS": {
+      "name": "Number of Syllables",
+      "source": "Baldwin & Wickens (1974)",
+      "rpi": 0.20,
+      "cat_a": {
+        "name": "1 syllable",
+        "words": ["bread","Maine","nose","gun","bee","sale","house","nurse","fox","green","train","rose","saw","flute","nun","yacht","boat","hill","pearl","stove"]
+      },
+      "cat_b": {
+        "name": "2 syllables",
+        "words": ["butter","Texas","finger","rifle","spider","pepper","hotel","doctor","rabbit","yellow","airplane","daisy","hammer","measles","trombone","forest","pastor","sailboat","wagon","valley"]
+      }
+    },
+    "AA": {
+      "name": "Acoustic & Articulation",
+      "source": "Baldwin & Wickens (1974)",
+      "rpi": 0.25,
+      "cat_a": {
+        "name": "closed front vowels",
+        "words": ["pig","lid","hip","niche","fierce","east","sea","wheat","inch","flea","ditch","sleet","skiff","disc","twig","sheep","yeast","wind","eel","sleeve"]
+      },
+      "cat_b": {
+        "name": "open back vowels",
+        "words": ["hog","cork","jaw","sloth","harsh","north","shore","corn","yard","wasp","gorge","fog","yacht","orb","straw","fox","lard","storm","cod","moth"]
+      }
+    },
+    "Fr": {
+      "name": "Frequency of Occurrence",
+      "source": "Swanson & Wickens (1970)",
+      "rpi": 0.50,
+      "cat_a": {
+        "name": "high-frequency nouns",
+        "words": ["nature","chair","home","music","ball","office","room","nation","truth","valley","glass","snow","water","inch","doctor","cotton","party","life","night","book"]
+      },
+      "cat_b": {
+        "name": "low-frequency nouns",
+        "words": ["turnip","niche","jade","chalk","herb","puppet","soot","attic","instep","cavern","idol","posse","helm","banjo","rodent","racket","pedal","knob","lobe","cactus"]
+      }
+    },
+    "WN": {
+      "name": "Words versus Numbers",
+      "source": "Reutener (1972)",
+      "rpi": 0.94,
+      "cat_a": {
+        "name": "words (furniture)",
+        "words": ["chair","table","bed","sofa","desk","lamp","couch","dresser","television","stool","rug","bookcase","cabinet","chest","piano","footstool","buffet","bench"]
+      },
+      "cat_b": {
+        "name": "numbers",
+        "words": ["one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen"]
+      }
+    },
+    "TC": {
+      "name": "Taxonomic Category",
+      "source": "Bousfield, Cohen & Whitmarsh (1958)",
+      "rpi": 0.73,
+      "cat_a": {
+        "name": "animals (high freq)",
+        "words": ["dog","cat","horse","cow","bear","lion","deer","fox","rabbit","tiger","elephant","wolf","squirrel","leopard","raccoon","donkey"]
+      },
+      "cat_b": {
+        "name": "professions (high freq)",
+        "words": ["doctor","lawyer","professor","dentist","teacher","reverend","nurse","engineer","carpenter","salesman","accountant","farmer","banker","chemist","plumber","mechanic"]
+      }
+    },
+    "SI": {
+      "name": "Sensory Impression",
+      "source": "Wickens, Reutener & Eggemeier (1972)",
+      "rpi": 0.57,
+      "cat_a": {
+        "name": "round objects",
+        "words": ["barrel","knob","doughnut","head","balloon","wheel","globe","baseball","spool","dome","saucer","button","coin","marble","orange","pearl"]
+      },
+      "cat_b": {
+        "name": "white objects",
+        "words": ["milk","teeth","napkin","linen","rice","bandage","chalk","lint","salt","snow","collar","diaper","cloud","paper","cotton","flour"]
+      }
+    },
+    "SD_E": {
+      "name": "Semantic Differential - Evaluation",
+      "source": "Wickens & Clark (1968)",
+      "rpi": 0.56,
+      "cat_a": {
+        "name": "positive evaluation",
+        "words": ["church","god","beauty","pleasant","hand","home","love","fine","music","religious","friend","peace","marry","friendly","rest","happy"]
+      },
+      "cat_b": {
+        "name": "negative evaluation",
+        "words": ["war","fire","disease","bad","enemy","kill","terrible","hate","debt","failure","battle","argue","fight","death","danger","hunger"]
+      }
+    },
+    "SD_A": {
+      "name": "Semantic Differential - Activity",
+      "source": "Wickens & Clark (1968)",
+      "rpi": 0.63,
+      "cat_a": {
+        "name": "active",
+        "words": ["fire","sailor","great","attack","war","win","party","love","bird","arms","star","laugh","kiss","arm","warn","run"]
+      },
+      "cat_b": {
+        "name": "passive",
+        "words": ["dead","silent","sleep","lie","rock","egg","still","stone","silence","window","quiet","rest","die","late","iron","calm"]
+      }
+    },
+    "SD_P": {
+      "name": "Semantic Differential - Potency",
+      "source": "Wickens & Clark (1968)",
+      "rpi": 0.72,
+      "cat_a": {
+        "name": "potent",
+        "words": ["steel","iron","rock","metal","stone","hard","building","law","strong","tree","oil","mountain","power","science","duty","thunder"]
+      },
+      "cat_b": {
+        "name": "weak/soft",
+        "words": ["love","kiss","baby","wife","girl","beautiful","sister","mother","woman","heart","young","music","sorrow","daughter","child","flower"]
+      }
+    },
+    "Im": {
+      "name": "Imagery (Concreteness)",
+      "source": "Wickens & Engle (1970)",
+      "rpi": 0.14,
+      "cat_a": {
+        "name": "high imagery (concrete)",
+        "words": ["coffee","sea","hammer","frog","library","garden","ocean","mountain","yacht","leopard","ankle","tree","orchestra","breast","bouquet","brassiere"]
+      },
+      "cat_b": {
+        "name": "low imagery (abstract)",
+        "words": ["surtax","functionary","criterion","inanity","impropriety","concept","interim","gist","instance","kine","banality","abasement","unreality","debacle","soul","allegory"]
+      }
+    },
+    "VA": {
+      "name": "Verbs versus Adjectives",
+      "source": "Wickens, Clark, Hill & Wittlinger (1968)",
+      "rpi": 0.01,
+      "cat_a": {
+        "name": "verbs",
+        "words": ["accept","add","admire","admit","advise","afford","agree","alert","allow","amuse","announce","annoy","answer","appear","applaud","appreciate"]
+      },
+      "cat_b": {
+        "name": "adjectives",
+        "words": ["adorable","beautiful","clean","drab","elegant","fancy","glamorous","handsome","long","magnificent","plain","quaint","sparkling","unsightly","angry","bewildered"]
+      }
+    }
+  }
+}

@@ -9,8 +9,9 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
-from pi_test import PITest, build_base_query
-from utils import DATA_DIR
+from ..pi_test import PITest, build_base_query
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 # ---------- shared injection material ----------
 

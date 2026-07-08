@@ -3,7 +3,7 @@
 Also the canonical "empty feature" — feature() returns "" so composing [G0] into
 a task is a no-op (equivalent to a baseline run)."""
 from ._common import assemble
-from pi_test import PITest
+from ..pi_test import PITest
 
 ID = "G0"
 NAME = "baseline"

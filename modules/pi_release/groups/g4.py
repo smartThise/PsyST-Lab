@@ -1,6 +1,6 @@
 """G4 glitch tokens: high-norm / rare tokens. Composable mid-stream feature."""
 from ._common import assemble_midstream, _load_glitch_tokens
-from pi_test import PITest
+from ..pi_test import PITest
 
 ID = "G4"
 NAME = "glitch-tokens"

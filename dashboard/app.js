@@ -1,451 +1,517 @@
-// PI 释放实验 · 控制台前端
-const $ = (id) => document.getElementById(id);
-const fmt = (x, d = 3) => (x === null || x === undefined || isNaN(x)) ? "—" : Number(x).toFixed(d);
-const pct = (x) => (x === null || x === undefined || isNaN(x)) ? "—" : (Number(x) * 100).toFixed(1) + "%";
+// PsyST Lab · 模块驱动薄壳
+const $ = id => document.getElementById(id);
+const fmt = (x, d = 3) => (x == null || isNaN(x)) ? "—" : Number(x).toFixed(d);
+const pct = x => (x == null || isNaN(x)) ? "—" : (Number(x) * 100).toFixed(1) + "%";
+const fmtV = (v, f) => { if (v == null) return "—"; if (f === "pct") return pct(v); if (f === "d") return Math.round(v); if (f === "str") return v; return fmt(v); };
+async function api(url, opts) { const r = await fetch(url, { cache: "no-store", ...opts }); if (!r.ok) throw Error(r.status); return r.json(); }
 
-async function fetchJSON(url, opts) {
-  const r = await fetch(url, { cache: "no-store", ...opts });
-  if (!r.ok) throw new Error(`${r.status}`);
-  return r.json();
+// ═══════════════════════════════════════════════════════
+// 状态
+// ═══════════════════════════════════════════════════════
+let selMod = "pi_release", spec = {}, groupInfo = [], allMods = [], runs = [];
+let charts = {}, dragState = null, composerTasks = [], selectedFeature = null;
+// 多关键字排序队列
+let sortQueue = [];  // [{key, dir: 1|-1}], 第一项=第一关键字
+let _curItems = [];
+
+function toggleSort(key, shift) {
+  const idx = sortQueue.findIndex(s => s.key === key);
+  if (shift) {
+    if (idx >= 0) {
+      if (sortQueue[idx].dir > 0) sortQueue[idx].dir = -1;
+      else sortQueue.splice(idx, 1);
+    } else { sortQueue.push({key, dir: 1}); }
+  } else {
+    if (idx === 0) {
+      if (sortQueue[0].dir > 0) sortQueue[0].dir = -1;
+      else sortQueue.shift();
+    } else if (idx > 0) {
+      const [item] = sortQueue.splice(idx, 1); sortQueue.unshift(item);
+    } else { sortQueue.unshift({key, dir: 1}); }
+  }
+  renderAll();
+}
+function multiSort(items) {
+  if (!sortQueue.length) return items;
+  return [...items].sort((a, b) => {
+    for (const {key, dir} of sortQueue) {
+      const va = a[key], vb = b[key];
+      if (va == null && vb == null) continue;
+      if (va == null) return -dir; if (vb == null) return dir;
+      let cmp = 0;
+      if (typeof va === 'string') cmp = va.localeCompare(String(vb));
+      else cmp = va - vb;
+      if (cmp !== 0) return dir * cmp;
+    }
+    return 0;
+  });
+}
+function sortIndicatorHTML(key) {
+  const idx = sortQueue.findIndex(s => s.key === key);
+  if (idx < 0) return "";
+  return `<span class="sort-idx">${idx+1}${sortQueue[idx].dir>0?'▲':'▼'}</span>`;
+}
+function renderSortBar() {
+  const bar = $("sort-bar"), chips = $("sort-chips");
+  if (!bar || !chips) return;
+  if (!sortQueue.length) { bar.style.display = "none"; return; }
+  bar.style.display = "";
+  chips.innerHTML = sortQueue.map((s, i) =>
+    `<span class="chip sort-chip" onclick="toggleSort('${s.key}',true)" title="点击反转, Shift+点击添加">${s.key} ${s.dir>0?'▲':'▼'} ${i===0?'(主)':''}</span>`
+  ).join(" ");
+}
+function renderAll() { renderSortBar(); renderTable(_curItems); renderCharts(_curItems); }
+
+function exportCSV() {
+  if (!_curItems.length) return;
+  const cols = spec.columns || [{ key: "accuracy", label: "指标", fmt: ".3f" }];
+  const sorted = multiSort(_curItems);
+  const header = ["条件", ...cols.map(c => c.label)].join(",");
+  const rows = sorted.map(g =>
+    [g.id, ...cols.map(c => {
+      const v = g[c.key]; if (v == null) return "";
+      if (c.fmt === "pct") return (v * 100).toFixed(1) + "%";
+      if (c.fmt === "d") return Math.round(v);
+      return typeof v === "number" ? v.toFixed(3) : String(v);
+    })].join(",")
+  );
+  const csv = "﻿" + [header, ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `${selMod}_${new Date().toISOString().slice(0,10)}.csv`; a.click();
 }
 
-// ---------- tabs ----------
-document.querySelectorAll(".tab").forEach(btn => {
-  btn.onclick = () => {
-    document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-    btn.classList.add("active");
-    $(`tab-${btn.dataset.tab}`).classList.add("active");
-    if (btn.dataset.tab === "compare") renderComparePicker();
-    if (btn.dataset.tab === "launch") { renderTaskComposer(); renderProfileDropdown(); }
-    if (btn.dataset.tab === "settings") renderSettingsProfiles();
-  };
+// ═══════════════════════════════════════════════════════
+// 初始化 — 加载模块
+// ═══════════════════════════════════════════════════════
+async function init() {
+  allMods = await api("/api/modules");
+  if (!allMods.length) return;
+  const s = $("mod-sel");
+  s.innerHTML = allMods.map(m => `<option value="${m.id}" ${m.id===selMod?"selected":""}>${m.name}</option>`).join("");
+  s.onchange = async () => { selMod = s.value; await switchMod(); };
+  await switchMod();
+}
+
+async function switchMod() {
+  spec = await api(`/api/spec/${selMod}`);
+  groupInfo = spec.launch?.features || [];
+  sortQueue = []; $("sort-bar").style.display = "none";
+  $("footer-module").textContent = selMod;
+  loadRuns();
+  loadProfiles();
+}
+
+// ═══════════════════════════════════════════════════════
+// Tab 切换
+// ═══════════════════════════════════════════════════════
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  b.classList.add("active");
+  $(`tab-${b.dataset.tab}`).classList.add("active");
+  if (b.dataset.tab === "compare") renderCompare();
+  if (b.dataset.tab === "launch") renderLaunch();
+  if (b.dataset.tab === "settings") renderSettings();
 });
 
-function groupColor(id) {
-  const g = groupInfo.find(x => x.id === id);
-  return (g && g.color) || "#57606a";
-}
-function badge(id) {
-  return `<span class="tag tag-dyn" style="--c:${groupColor(id)}">${id}</span>`;
-}
-function reColor(re) {
-  if (re === null || re === undefined || isNaN(re)) return "var(--muted)";
-  if (re >= 0.2) return "var(--green)";
-  if (re >= 0.05) return "var(--amber)";
-  return "var(--red)";
+// ═══════════════════════════════════════════════════════
+// 数据兼容
+// ═══════════════════════════════════════════════════════
+function _n(items) {
+  return (items || []).map(g => ({
+    id: g.condition_id || g.id || "?",
+    name: g.condition_name || g.name || g.id || "?",
+    accuracy: g.accuracy ?? null, re: g.re ?? null, cp: g.cp ?? null,
+    robustness_delta: g.robustness_delta ?? null, n_calls: g.n || g.n_calls || 0,
+    rpi: g.rpi ?? null, lag1_corr: g.lag1_corr ?? null,
+    assimilation_score: g.assimilation_score ?? null,
+    mean_accuracy: g.mean_accuracy ?? null,
+    direction_tag: g.direction_tag ?? null,
+  }));
 }
 
-// ====================== 实时 ======================
-async function refreshLive() {
-  try {
-    const s = await fetchJSON("/api/status");
-    const pill = $("status-pill"), stxt = $("status-text");
-    pill.classList.toggle("on", s.running); pill.classList.toggle("off", !s.running);
-    stxt.textContent = s.running ? "运行中" : "空闲";
-    $("live-state").textContent  = s.running ? "运行中" : "空闲";
-    $("live-group").textContent  = s.current_group || "—";
-    $("live-progress").textContent = s.records_total != null ? `${s.records_done}/${s.records_total}` : `${s.records_done}`;
-    $("live-tag").textContent = s.latest_run || "—";
-    $("live-log").textContent = s.log_tail || "（暂无日志）";
-    $("live-log").scrollTop = $("live-log").scrollHeight;
-    const fsb = $("force-stop-btn"); if (fsb) fsb.disabled = !s.running;
-  } catch (e) {}
+// ═══════════════════════════════════════════════════════
+// 结果 — Run 列表
+// ═══════════════════════════════════════════════════════
+async function loadRuns() {
+  runs = (await api("/api/runs")).filter(r => r.module_id === selMod);
+  const sel = $("run-select"), empty = $("results-empty"), content = $("results-content");
+  sel.innerHTML = "";
+  if (!runs.length) { empty.classList.remove("hidden"); content.classList.add("hidden"); return; }
+  empty.classList.add("hidden"); content.classList.remove("hidden");
+  runs.forEach((r, i) => { const o = document.createElement("option"); o.value = i; o.textContent = `${r.tag} · ${r.model}`; sel.appendChild(o); });
+  sel.onchange = () => loadRun(+sel.value);
+  if (runs.length) loadRun(0);
 }
-setInterval(refreshLive, 3000); refreshLive();
 
-$("force-stop-btn").onclick = async () => {
-  if (!confirm("强制停止运行中的进程并删除其 run 目录?此操作不可撤销。")) return;
-  $("force-stop-msg").textContent = "处理中…";
-  try {
-    const r = await fetchJSON("/api/force-stop", {method: "POST"});
-    const parts = [];
-    if (r.killed && r.killed.length) parts.push(`已杀进程 ${r.killed.join(", ")}`);
-    if (r.deleted) parts.push(`已删除 ${r.deleted}`);
-    if (!parts.length) parts.push("没有运行中的进程或未完成目录");
-    $("force-stop-msg").textContent = parts.join(" · ");
-    refreshLive();
-  } catch (e) { $("force-stop-msg").textContent = `错误:${e.message}`; }
+async function loadRun(idx) {
+  const r = runs[idx]; if (!r) return;
+  const s = await api(`/api/run/${r.run_dir}`);
+  const items = _n(s.conditions || s.groups || []);
+  $("meta-model").textContent = `模型:${s.model || "?"}`;
+  $("meta-pi").textContent = s.pi_test ? `PI:${s.pi_test.n_keys}×${s.pi_test.updates_per_key}` : (s.module_name || selMod);
+  $("meta-calls").textContent = `${items.reduce((a, g) => a + (g.n_calls || 0), 0)} 次调用`;
+  _curItems = items; sortQueue = []; renderKpis(items); renderCharts(items); renderTable(items);
+}
+
+// ═══════════════════════════════════════════════════════
+// Builder: KPI 卡片 (从 KPISpec)
+// ═══════════════════════════════════════════════════════
+function renderKpis(items) {
+  const kpis = spec.kpis || [];
+  $("kpi-row").innerHTML = kpis.map(k => {
+    let vals = items.map(g => g[k.data_key]).filter(v => v != null);
+    if (k.exclude_g0) {
+      const nonG0 = items.filter(g => g.id !== "G0").map(g => g[k.data_key]).filter(v => v != null);
+      if (nonG0.length) vals = nonG0;
+    }
+    const val = k.aggregate === "max" ? (vals.length ? Math.max(...vals) : null)
+      : k.aggregate === "mean" ? (vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null)
+      : k.aggregate === "sum" ? (vals.length ? vals.reduce((a, b) => a + b, 0) : null)
+      : vals[0];
+    return `<div class="kpi ${k.accent ? 'accent' : ''}"><span class="label">${k.label}</span><span class="value">${fmtV(val, k.fmt)}</span></div>`;
+  }).join("");
+}
+
+// ═══════════════════════════════════════════════════════
+// Builder: 图表 (从 ChartSpec, 保留美丽 Chart.js 配置)
+// ═══════════════════════════════════════════════════════
+const LIGHT = {
+  grid: "rgba(31,35,40,0.08)", tick: "#57606a",
+  tooltip: { backgroundColor: "#fff", borderColor: "#d0d7de", borderWidth: 1, titleColor: "#1f2328", bodyColor: "#424a53", boxPadding: 4, cornerRadius: 6 }
 };
 
-// ====================== 结果 ======================
-let charts = {};
-async function loadRunsList() {
-  const runs = await fetchJSON("/api/runs");
-  const sel = $("run-select"); sel.innerHTML = "";
-  if (!runs.length) { $("results-empty").classList.remove("hidden"); $("results-content").classList.add("hidden"); return; }
-  $("results-empty").classList.add("hidden"); $("results-content").classList.remove("hidden");
-  for (const r of runs) {
-    const o = document.createElement("option"); o.value = r.tag;
-    const pi = r.pi_test || {};
-    o.textContent = `${r.tag} · ${r.model} · ${(r.baseline_acc*100).toFixed(1)}% · ${pi.n_keys||"?"}×${pi.updates_per_key||"?"}`;
-    sel.appendChild(o);
+function renderCharts(items) {
+  Object.values(charts).forEach(c => c?.destroy()); charts = {};
+  const sorted = multiSort(items);
+  const chartSpecs = (spec.charts || []).filter(c => c.chart_type !== "kpi" && c.chart_type !== "table");
+  $("chart-grid").innerHTML = chartSpecs.map(c =>
+    `<div class="chart-card"><header><h3>${c.title}</h3><span class="sort-hint" onclick="toggleSort('${c.data_key}');return false" title="点击按此指标排序">按${c.data_key}排序</span></header><canvas id="ch-${c.chart_id}" height="120"></canvas></div>`
+  ).join("");
+
+  const labels = sorted.map(g => g.id);
+  const colors = labels.map((_, i) => `hsl(${i * 360 / Math.max(labels.length,1)}, 60%, 55%)`);
+  const scales = {
+    x: { ticks: { color: LIGHT.tick, font: { size: 12 } }, grid: { display: false }, border: { color: "#d0d7de" } },
+    y: { beginAtZero: true, ticks: { color: LIGHT.tick }, grid: { color: LIGHT.grid }, border: { display: false } }
+  };
+  const legend = { labels: { color: "#424a53", font: { size: 12 }, boxWidth: 12, boxHeight: 12 } };
+
+  for (const c of chartSpecs) {
+    const ctx = $(`ch-${c.chart_id}`); if (!ctx) continue;
+    const vals = sorted.map(g => g[c.data_key] ?? 0);
+    const datasets = [{
+      label: c.y_label || c.data_key, data: vals,
+      backgroundColor: colors.map(co => co + "44"), borderColor: colors,
+      borderWidth: 1.5, borderRadius: 3
+    }];
+    if (c.data_key_secondary) {
+      const vals2 = sorted.map(g => g[c.data_key_secondary] ?? 0);
+      datasets.push({
+        label: c.data_key_secondary, data: vals2,
+        backgroundColor: "rgba(207,34,46,0.15)", borderColor: "#cf222e",
+        borderWidth: 1.5, borderRadius: 3
+      });
+    }
+    charts[c.chart_id] = new Chart(ctx, {
+      type: c.chart_type || "bar",
+      data: { labels, datasets },
+      options: { responsive: true, plugins: { legend, tooltip: LIGHT.tooltip }, scales }
+    });
   }
-  sel.onchange = () => loadRun(sel.value);
-  if (sel.value) loadRun(sel.value);
 }
-async function loadRun(tag) {
-  if (!tag) return;
-  const s = await fetchJSON(`/api/run/${tag}`);
-  $("meta-model").textContent = `模型:${s.model}`;
-  $("meta-pi").textContent = `PI:${s.pi_test.n_keys}×${s.pi_test.updates_per_key},${s.pi_test.n_trials}试次`;
-  $("meta-calls").textContent = `${s.groups.reduce((a,g)=>a+(g.n_calls||0),0)} 次调用`;
-  renderKPIs(s); renderCharts(s); renderDetail(s);
-}
-function renderKPIs(s) {
-  const groups = s.groups || [];
-  const baseline = s.baseline_acc ?? 0;
-  const best = groups.filter(g=>g.id!=="G0").reduce((a,b)=>((b.re||0)>(a?.re||0)?b:a), null);
-  $("kpi-baseline").textContent = pct(baseline);
-  $("kpi-best-re").textContent = best ? fmt(best.re) : "—";
-  $("kpi-best-group").textContent = best ? best.id : "—";
-  const cps = groups.map(g=>g.cp).filter(x=>x!==null&&x!==undefined);
-  $("kpi-cp").textContent = cps.length ? pct(cps.reduce((a,b)=>a+b,0)/cps.length) : "—";
-}
-const LIGHT = { grid:"rgba(31,35,40,0.08)", tick:"#57606a",
-  tooltip:{backgroundColor:"#fff",borderColor:"#d0d7de",borderWidth:1,titleColor:"#1f2328",bodyColor:"#424a53",boxPadding:4,cornerRadius:6}};
-function renderCharts(s) {
-  Object.values(charts).forEach(c=>c?.destroy()); charts = {};
-  const groups = s.groups || []; const labels = groups.map(g=>g.id);
-  const scales = { x:{ticks:{color:LIGHT.tick,font:{size:12}},grid:{display:false},border:{color:"#d0d7de"}},
-    y:{beginAtZero:true,max:1,ticks:{color:LIGHT.tick,callback:v=>(v*100)+"%"},grid:{color:LIGHT.grid},border:{display:false}}};
-  const legend = {labels:{color:"#424a53",font:{size:12},boxWidth:12,boxHeight:12}};
-  charts.main = new Chart($("chart-main").getContext("2d"), {type:"bar",data:{labels,datasets:[
-    {label:"准确率",data:groups.map(g=>g.accuracy??0),backgroundColor:groups.map(g=>groupColor(g.id)+"22"),borderColor:groups.map(g=>groupColor(g.id)),borderWidth:1.5,borderRadius:3},
-    {label:"RE",data:groups.map(g=>g.re??0),backgroundColor:groups.map(g=>groupColor(g.id)),borderRadius:3},
-  ]},options:{responsive:true,plugins:{legend,tooltip:LIGHT.tooltip},scales}});
-  charts.cp = new Chart($("chart-cp").getContext("2d"), {type:"bar",data:{labels,datasets:[
-    {label:"CP",data:groups.map(g=>g.cp??0),backgroundColor:groups.map(g=>(g.cp>0.5?"#dafbe1":"#ffebe9")),borderColor:groups.map(g=>(g.cp>0.5?"#1a7f37":"#cf222e")),borderWidth:1.2,borderRadius:3},
-    {label:"鲁棒性Δ",data:groups.map(g=>g.robustness_delta??0),backgroundColor:"#fff8c5",borderColor:"#bf8700",borderWidth:1.2,borderRadius:3},
-  ]},options:{responsive:true,plugins:{legend,tooltip:LIGHT.tooltip},scales}});
-}
-function renderDetail(s) {
-  const tb = $("detail-table").querySelector("tbody"); tb.innerHTML="";
-  for (const g of (s.groups||[])) {
+
+// ═══════════════════════════════════════════════════════
+// Builder: 表格 (从 ColumnSpec, 带排序 + 导出)
+// ═══════════════════════════════════════════════════════
+function renderTable(items) {
+  const cols = spec.columns || [{ key: "accuracy", label: "指标", fmt: ".3f" }];
+  const sorted = multiSort(items); _curItems = items;
+  $("table-title").textContent = "详情";
+  const thead = $("detail-table").querySelector("thead");
+  thead.innerHTML = "<tr><th>条件</th>" + cols.map(c =>
+    `<th class="sortable" onclick="toggleSort('${c.key}')" onauxclick="toggleSort('${c.key}',true);return false" title="点击排序(Shift+点击=多关键字)">${c.label}${sortIndicatorHTML(c.key)}</th>`
+  ).join("") + "</tr>";
+  const tbody = $("detail-table").querySelector("tbody"); tbody.innerHTML = "";
+  for (const g of sorted) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${badge(g.id)}</td><td>${g.name}</td>
-      <td class="num">${pct(g.accuracy)}</td>
-      <td class="num" style="color:${reColor(g.re)};font-weight:600">${fmt(g.re)}</td>
-      <td class="num">${pct(g.cp)}</td><td class="num">${fmt(g.robustness_delta)}</td><td class="num">${g.n_calls||"—"}</td>`;
-    tb.appendChild(tr);
+    tr.innerHTML = `<td>${g.id}</td>` + cols.map(c => `<td class="num">${fmtV(g[c.key], c.fmt)}</td>`).join("");
+    tbody.appendChild(tr);
   }
+  renderSortBar();
 }
 
-// ====================== 对比 ======================
-let compareRuns = [];
-async function renderComparePicker() {
-  if (!compareRuns.length) compareRuns = await fetchJSON("/api/runs");
-  const pk = $("compare-picker"); pk.innerHTML = "";
-  if (!compareRuns.length) { pk.innerHTML = '<p class="muted small">暂无 run。</p>'; return; }
-  for (const r of compareRuns) {
-    const pi = r.pi_test || {};
-    const lbl = document.createElement("label"); lbl.className = "picker-item";
-    lbl.innerHTML = `<input type="checkbox" data-tag="${r.tag}">
-      <span class="picker-tag">${r.tag}</span>
-      <span class="picker-meta">${r.model} · ${pi.n_keys||"?"}×${pi.updates_per_key||"?"} · 基线 ${(r.baseline_acc*100).toFixed(1)}%</span>`;
-    lbl.querySelector("input").onchange = renderCompare;
-    pk.appendChild(lbl);
-  }
-}
-async function renderCompare() {
-  const checked = [...document.querySelectorAll("#compare-picker input:checked")].map(e=>e.dataset.tag);
-  const table = $("compare-table");
-  if (!checked.length) { table.innerHTML = '<caption class="muted">勾选上方 run 生成对比</caption>'; return; }
-  const data = await fetchJSON(`/api/compare?tags=${encodeURIComponent(checked.join(","))}`);
-  const showRE = $("compare-re").checked;
-  const gids = new Set();
-  Object.values(data).forEach(r=>Object.keys(r.groups).forEach(g=>gids.add(g)));
-  // rows = package group order (dynamic, includes G9+) ∩ present, then any leftover
-  if (!groupInfo.length) groupInfo = (await fetchJSON("/api/groups")).groups;
-  const cols = groupInfo.map(g=>g.id).filter(g=>gids.has(g));
-  for (const g of [...gids].sort()) if (!cols.includes(g)) cols.push(g);
-  let html = `<thead><tr><th>组 \\ run</th>`;
-  for (const tag of checked) {
-    const r = data[tag]; if (!r) continue;
-    html += `<th><div class="cth-tag">${tag}</div><div class="cth-meta">${r.model||""} · ${(r.pi_test||{}).n_keys||""}×${(r.pi_test||{}).updates_per_key||""}</div><div class="cth-base">基线 ${((r.baseline_acc||0)*100).toFixed(1)}%</div></th>`;
-  }
-  html += "</tr></thead><tbody>";
-  for (const gid of cols) {
-    let row = `<tr><td>${badge(gid)}</td>`;
-    for (const tag of checked) {
-      const g = data[tag]?.groups?.[gid];
-      if (!g) { row += `<td class="num muted">—</td>`; continue; }
-      const val = showRE ? (g.re ?? 0) : (g.accuracy ?? 0);
-      const color = val>=0.5?"var(--green)":val<0.2?"var(--red)":"var(--text-2)";
-      row += `<td class="num" style="color:${color};font-weight:600">${showRE?fmt(g.re):pct(g.accuracy)}</td>`;
-    }
-    html += row + "</tr>";
-  }
-  table.innerHTML = html + "</tbody>";
-}
-$("compare-re").onchange = renderCompare;
+// ═══════════════════════════════════════════════════════
+// Builder: 启动面板
+// ═══════════════════════════════════════════════════════
+async function renderLaunch() {
+  const composer = spec.launch?.composer || "checklist";
+  const extra = spec.launch?.extra_params || [];
+  const desc = spec.launch?.description || "";
+  const descEl = $("launch-desc"); if (descEl) descEl.textContent = desc;
 
-// ====================== profiles ======================
-let profiles = [];
-async function loadProfiles() {
-  const r = await fetchJSON("/api/profiles");
-  profiles = r.profiles || [];
-  return profiles;
-}
+  // 隐藏 PI-specific 旧字段, 渲染泛用 extra_params
+  const formGrid = document.querySelector(".form-grid-5");
+  if (formGrid) formGrid.innerHTML = extra.map(p =>
+    `<label>${p.label}<input id="f-${p.key}" type="number" value="${p.default || 1}"></label>`
+  ).join("");
 
-async function renderProfileDropdown() {
-  if (!profiles.length) await loadProfiles();
-  const sel = $("f-profile"); sel.innerHTML = "";
-  if (!profiles.length) {
-    sel.innerHTML = "<option>（先在「设置」加一个配置）</option>";
-    $("f-profile-info").textContent = "";
-    return;
-  }
-  for (const p of profiles) {
-    const o = document.createElement("option");
-    o.value = p.name;
-    o.textContent = `${p.name} · ${p.model} · ${p.api_key}`;
-    sel.appendChild(o);
-  }
-  sel.onchange = () => {
-    const p = profiles.find(x=>x.name===sel.value);
-    $("f-profile-info").textContent = p ? `${p.base_url} · model=${p.model}` : "";
-  };
-  sel.onchange();
-}
-
-async function renderSettingsProfiles() {
-  await loadProfiles();
-  const box = $("settings-profiles"); box.innerHTML = "";
-  if (!profiles.length) {
-    box.innerHTML = '<p class="muted small">还没有保存的配置。在下方添加一个。</p>'; return;
-  }
-  for (const p of profiles) {
-    const card = document.createElement("div"); card.className = "profile-card";
-    card.innerHTML = `
-      <div class="profile-head">
-        <span class="profile-name">${p.name}</span>
-        <button class="link-btn" data-del="${p.name}">删除</button>
-      </div>
-      <div class="profile-detail"><span class="muted">base_url</span><code>${p.base_url}</code></div>
-      <div class="profile-detail"><span class="muted">model</span><code>${p.model}</code></div>
-      <div class="profile-detail"><span class="muted">api_key</span><code>${p.api_key}</code></div>
-      ${fmtExtra(p.extra_body) ? `<div class="profile-detail"><span class="muted">额外参数</span><code>${fmtExtra(p.extra_body)}</code></div>` : ""}`;
-    card.querySelector("[data-del]").onclick = async () => {
-      await fetch(`/api/profiles?name=${encodeURIComponent(p.name)}`, {method:"DELETE"});
-      $("p-msg").textContent = `已删除 ${p.name}`;
-      renderSettingsProfiles();
-    };
-    box.appendChild(card);
-  }
-}
-
-$("p-save").onclick = async () => {
-  const body = {
-    name: $("p-name").value.trim(),
-    base_url: $("p-baseurl").value.trim(),
-    api_key: $("p-apikey").value.trim(),
-    model: $("p-model").value.trim(),
-    extra_body: $("p-extra").value,
-  };
-  if (!body.name || !body.base_url || !body.api_key) {
-    $("p-msg").textContent = "name / base_url / api_key 不能为空"; return;
-  }
-  $("p-msg").textContent = "保存中…";
+  // Profile dropdown
   try {
-    const r = await fetchJSON("/api/profiles", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-    $("p-msg").textContent = r.ok ? `已保存「${r.name}」` : (`失败:${r.error}`);
-    if (r.ok) { $("p-name").value = $("p-baseurl").value = $("p-apikey").value = $("p-model").value = $("p-extra").value = ""; renderSettingsProfiles(); }
-  } catch (e) { $("p-msg").textContent = `错误:${e.message}`; }
-};
+    const profs = (await api("/api/profiles")).profiles || [];
+    const sel = $("f-profile"); if (sel) sel.innerHTML = profs.map(p => `<option>${p.name}</option>`).join("");
+  } catch (e) { }
 
-function fmtExtra(eb) {
-  if (!eb || typeof eb !== "object" || Object.keys(eb).length === 0) return null;
-  // render nested dict as "key: sub: val" style lines
-  const lines = [];
-  for (const [k, v] of Object.entries(eb)) {
-    if (v && typeof v === "object") {
-      for (const [k2, v2] of Object.entries(v)) lines.push(`${k}.${k2}: ${v2}`);
+  if (composer === "drag") {
+    renderTaskComposer();
+  } else {
+    renderChecklistPicker();
+  }
+
+  // Launch button
+  $("launch-btn").onclick = async () => {
+    const body = { profile: $("f-profile")?.value || "", module_id: selMod };
+    if (composer === "drag") {
+      const tasks = composerTasks.map(t => ({ features: t.features.filter(f => f), ...(t.name ? { name: t.name } : {}) }));
+      if (!tasks.length) tasks.push({ features: [] });
+      body.tasks = tasks;
     } else {
-      lines.push(`${k}: ${v}`);
+      const checked = [...document.querySelectorAll("#launch-conds input:checked")].map(c => c.value);
+      if (!checked.length) { $("launch-msg").textContent = "请选择至少一个条件"; return; }
+      body.conditions = checked;
     }
-  }
-  return lines.join(" · ");
+    extra.forEach(p => { const v = $(`f-${p.key}`)?.value; if (v) body[p.key] = +v; });
+    $("launch-msg").textContent = "启动中…";
+    try {
+      const r = await api("/api/launch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      $("launch-msg").textContent = r.launched ? `已启动! ${r.module_id || ""}` : `失败:${r.error}`;
+      document.querySelector('.tab[data-tab="live"]')?.click();
+    } catch (e) { $("launch-msg").textContent = `错误:${e.message}`; }
+  };
 }
 
-// ====================== 启动 ======================
-let groupInfo = [];
-// ---------- task composer (launch) ----------
-// A task = ordered feature list (empty = baseline). Drag features from the
-// palette into a task card; drag chips within/across cards to reorder.
-let composerTasks = [{ features: ["G2"], name: "" }];
-let dragState = null;  // {source: "palette"|"task", taskId?, idx?, feature}
+// ═══════════════════════════════════════════════════════
+// Checkbox picker (for "checklist" composer)
+// ═══════════════════════════════════════════════════════
+async function renderChecklistPicker() {
+  // Hide drag-specific UI
+  const composer = document.getElementById("task-composer");
+  if (composer) composer.style.display = "none";
+  $("add-task") && ($("add-task").style.display = "none");
 
-async function renderTaskComposer() {
-  if (!groupInfo.length) {
-    try { groupInfo = (await fetchJSON("/api/groups")).groups || []; } catch {}
+  // Build checkbox grid
+  let grid = $("launch-conds");
+  if (!grid) {
+    grid = document.createElement("div"); grid.id = "launch-conds";
+    grid.className = "cond-grid";
+    const form = document.querySelector(".form-groups") || $("tab-launch");
+    const btn = $("launch-btn");
+    form?.insertBefore(grid, btn);
   }
-  renderPalette();
-  renderPaletteDetail();
-  renderTaskList();
+  const conds = await api(`/api/groups?module=${selMod}`);
+  const list = conds.conditions || [];
+  grid.innerHTML = list.map(c =>
+    `<label class="cond-chip"><input type="checkbox" value="${c.id}"> ${c.name}</label>`
+  ).join("");
 }
 
-function chipColor(g) { return (g && g.color) ? g.color : "#57606a"; }
+// ═══════════════════════════════════════════════════════
+// Task Composer (drag-and-drop — for "drag" composer)
+// ═══════════════════════════════════════════════════════
+function chipColor(g) { return g.color || "#57606a"; }
+function groupColor(id) { const g = groupInfo.find(x => x.id === id); return (g && g.color) || "#57606a"; }
+function badge(id) { return `<span class="tag tag-dyn" style="--c:${groupColor(id)}">${id}</span>`; }
+function reColor(re) { if (re == null || isNaN(re)) return "var(--muted)"; if (re >= 0.2) return "var(--green)"; if (re >= 0.05) return "var(--amber)"; return "var(--red)"; }
 
-let selectedFeature = null;
+function renderTaskComposer() {
+  const composer = document.getElementById("task-composer");
+  if (composer) composer.style.display = "";
+  $("add-task") && ($("add-task").style.display = "");
+  const grid = $("launch-conds"); if (grid) grid.innerHTML = "";
+
+  composerTasks = [{ features: [], name: "" }];
+  renderPalette(); renderTaskList();
+}
 
 function renderPalette() {
   const pal = $("palette"); if (!pal) return;
   pal.innerHTML = "";
-  const feats = groupInfo.filter(g => g.id !== "G0");  // G0 = empty task, not draggable
-  for (const g of feats) {
+  for (const g of groupInfo) {
+    if (!g.composable) continue;
     const chip = document.createElement("span");
-    chip.className = "chip chip-drag" + (g.position === "end" ? " chip-end" : "")
-                   + (selectedFeature === g.id ? " chip-selected" : "");
+    chip.className = "chip chip-drag";
     chip.style.setProperty("--c", chipColor(g));
     chip.draggable = true;
     chip.textContent = g.id;
-    chip.title = "点击查看说明 / 拖到任务框";
-    chip.ondragstart = (e) => { dragState = { source: "palette", feature: g.id }; e.dataTransfer.effectAllowed = "copy"; };
+    chip.title = "点击看说明 / 拖入任务";
+    chip.ondragstart = e => { dragState = { source: "palette", feature: g.id }; e.dataTransfer.effectAllowed = "copy"; };
     chip.ondragend = () => { dragState = null; };
-    chip.onclick = () => {
-      selectedFeature = (selectedFeature === g.id) ? null : g.id;
-      renderPalette();
-      renderPaletteDetail();
-    };
+    chip.onclick = () => { selectedFeature = (selectedFeature === g.id) ? null : g.id; renderPaletteDetail(); };
     pal.appendChild(chip);
   }
 }
 
 function renderPaletteDetail() {
   const box = $("palette-detail"); if (!box) return;
-  if (!selectedFeature) {
-    box.innerHTML = `<span class="muted small">点击上方 feature 查看说明,或直接拖到任务框。</span>`;
-    return;
-  }
+  if (!selectedFeature) { box.innerHTML = `<span class="muted small">点击 feature 看说明, 或拖入任务框。</span>`; return; }
   const g = groupInfo.find(x => x.id === selectedFeature);
-  if (!g) { box.innerHTML = ""; return; }
-  const posLabel = g.position === "end" ? "末尾注入" : "流中段注入";
-  box.innerHTML = `
-    <div class="palette-detail-head">
-      <span class="chip" style="--c:${chipColor(g)}">${g.id}</span>
-      <span class="palette-detail-name">${g.name}</span>
-      <span class="palette-detail-pos muted small">${posLabel}</span>
-    </div>
-    <div class="palette-detail-desc">${g.desc || "(无说明)"}</div>`;
+  if (!g) return;
+  box.innerHTML = `<div class="palette-detail-head"><span class="chip" style="--c:${chipColor(g)}">${g.id}</span><span class="palette-detail-name">${g.name}</span></div><div class="palette-detail-desc">${g.desc || ""}</div>`;
 }
 
 function renderTaskList() {
   const list = $("task-list"); if (!list) return;
   list.innerHTML = "";
   composerTasks.forEach((task, ti) => {
-    const card = document.createElement("div");
-    card.className = "task-card";
-
-    const head = document.createElement("div");
-    head.className = "task-head";
+    const card = document.createElement("div"); card.className = "task-card";
+    const head = document.createElement("div"); head.className = "task-head";
     const tid = task.features.length ? task.features.join("+") : "G0";
-    const idSpan = document.createElement("span");
-    idSpan.className = "task-id"; idSpan.textContent = tid;
-    const nameIn = document.createElement("input");
-    nameIn.className = "task-name"; nameIn.placeholder = "任务名(可选)";
-    nameIn.value = task.name || "";
-    nameIn.oninput = (e) => { task.name = e.target.value; };
+    const idSpan = document.createElement("span"); idSpan.className = "task-id"; idSpan.textContent = tid;
+    const nameIn = document.createElement("input"); nameIn.className = "task-name"; nameIn.placeholder = "任务名"; nameIn.value = task.name || "";
+    nameIn.oninput = e => { task.name = e.target.value; };
     head.appendChild(idSpan); head.appendChild(nameIn);
-    if (composerTasks.length > 1) {
-      const rm = document.createElement("button");
-      rm.className = "ghost tiny"; rm.textContent = "删除";
-      rm.onclick = () => { composerTasks.splice(ti, 1); renderTaskList(); };
-      head.appendChild(rm);
-    }
+    if (composerTasks.length > 1) { const rm = document.createElement("button"); rm.className = "ghost tiny"; rm.textContent = "删除"; rm.onclick = () => { composerTasks.splice(ti, 1); renderTaskList(); }; head.appendChild(rm); }
     card.appendChild(head);
-
-    const row = document.createElement("div");
-    row.className = "task-chips";
-    row.ondragover = (e) => { e.preventDefault(); row.classList.add("drag-over"); };
-    row.ondragleave = (e) => { if (!row.contains(e.relatedTarget)) row.classList.remove("drag-over"); };
-    row.ondrop = (e) => {
+    const row = document.createElement("div"); row.className = "task-chips";
+    row.ondragover = e => { e.preventDefault(); row.classList.add("drag-over"); };
+    row.ondragleave = e => { if (!row.contains(e.relatedTarget)) row.classList.remove("drag-over"); };
+    row.ondrop = e => {
       e.preventDefault(); row.classList.remove("drag-over");
       if (!dragState) return;
-      if (dragState.source === "palette") {
-        task.features.push(dragState.feature);
-      } else if (dragState.source === "task") {
+      if (dragState.source === "palette") { task.features.push(dragState.feature); }
+      else if (dragState.source === "task") {
         const fromTi = dragState.taskId, fromIdx = dragState.idx;
         let dropIdx = task.features.length;
         const overChip = e.target.closest(".chip-in-task");
-        if (overChip) {
-          const chips = [...row.querySelectorAll(".chip-in-task")];
-          let idx = chips.indexOf(overChip);
-          const r = overChip.getBoundingClientRect();
-          if (e.clientX > r.left + r.width / 2) idx++;  // past midpoint -> insert after
-          dropIdx = idx;
-        }
+        if (overChip) { const chips = [...row.querySelectorAll(".chip-in-task")]; let idx = chips.indexOf(overChip); const r = overChip.getBoundingClientRect(); if (e.clientX > r.left + r.width / 2) idx++; dropIdx = idx; }
         composerTasks[fromTi].features.splice(fromIdx, 1);
         if (fromTi === ti && fromIdx < dropIdx) dropIdx--;
         task.features.splice(dropIdx, 0, dragState.feature);
       }
-      dragState = null;
-      renderTaskList();
+      dragState = null; renderTaskList();
     };
-
-    if (task.features.length === 0) {
-      const ph = document.createElement("span");
-      ph.className = "muted small task-empty";
-      ph.textContent = "空任务 = 基线(无干预)。拖 feature 进来组合。";
-      row.appendChild(ph);
-    } else {
-      task.features.forEach((fid, idx) => {
-        const g = groupInfo.find(x => x.id === fid) || { id: fid };
-        const chip = document.createElement("span");
-        chip.className = "chip chip-in-task" + (g.position === "end" ? " chip-end" : "");
-        chip.style.setProperty("--c", chipColor(g));
-        chip.draggable = true;
-        chip.textContent = fid;
-        chip.ondragstart = (e) => { dragState = { source: "task", taskId: ti, idx, feature: fid }; e.dataTransfer.effectAllowed = "move"; };
-        chip.ondragend = () => { dragState = null; };
-        const x = document.createElement("span");
-        x.className = "chip-x"; x.textContent = "×"; x.title = "移除";
-        x.onclick = (e) => { e.stopPropagation(); task.features.splice(idx, 1); renderTaskList(); };
-        chip.appendChild(x);
-        row.appendChild(chip);
-      });
-    }
-    card.appendChild(row);
-    list.appendChild(card);
+    if (!task.features.length) { const ph = document.createElement("span"); ph.className = "muted small task-empty"; ph.textContent = "空任务 = 基线。拖 feature 进来组合。"; row.appendChild(ph); }
+    else { task.features.forEach((fid, idx) => { const g = groupInfo.find(x => x.id === fid) || { id: fid }; const chip = document.createElement("span"); chip.className = "chip chip-in-task"; chip.style.setProperty("--c", chipColor(g)); chip.draggable = true; chip.textContent = fid; chip.ondragstart = e => { dragState = { source: "task", taskId: ti, idx, feature: fid }; e.dataTransfer.effectAllowed = "move"; }; chip.ondragend = () => { dragState = null; }; const x = document.createElement("span"); x.className = "chip-x"; x.textContent = "×"; x.title = "移除"; x.onclick = e => { e.stopPropagation(); task.features.splice(idx, 1); renderTaskList(); }; chip.appendChild(x); row.appendChild(chip); }); }
+    card.appendChild(row); list.appendChild(card);
   });
 }
+$("add-task") && ($("add-task").onclick = () => { composerTasks.push({ features: [], name: "" }); renderTaskList(); });
 
-$("add-task").onclick = () => { composerTasks.push({ features: [], name: "" }); renderTaskList(); };
+// ═══════════════════════════════════════════════════════
+// 对比
+// ═══════════════════════════════════════════════════════
+async function renderCompare() { renderComparePicker(); renderCompareTable(); }
+async function renderComparePicker() {
+  const cr = (await api("/api/runs")).filter(r => r.module_id === selMod);
+  const pk = $("compare-picker"); pk.innerHTML = "";
+  if (!cr.length) { pk.innerHTML = '<p class="muted small">暂无 run。</p>'; return; }
+  cr.forEach(r => {
+    const lbl = document.createElement("label"); lbl.className = "picker-item";
+    lbl.innerHTML = `<input type="checkbox" data-rundir="${r.run_dir}"><span class="picker-tag">${r.tag}</span><span class="picker-meta">${r.model} · ${r.n_conditions||0}条件</span>`;
+    lbl.querySelector("input").onchange = renderCompareTable;
+    pk.appendChild(lbl);
+  });
+}
+async function exportCompareCSV() {
+  const table = $("compare-table");
+  const rows = table.querySelectorAll("tr");
+  if (!rows.length) return;
+  let csv = "";
+  rows.forEach(row => {
+    const cells = row.querySelectorAll("th, td");
+    csv += [...cells].map(c => `"${c.textContent.replace(/"/g,'""').trim()}"`).join(",") + "\n";
+  });
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `compare_${selMod}_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+}
 
-$("launch-btn").onclick = async () => {
-  // send composed tasks; drop empties, but if that leaves nothing, send a baseline-only run
-  const sendTasks = composerTasks
-    .map(t => ({ features: t.features.filter(f => f), name: t.name }))
-    .filter(t => t.features.length > 0);
-  if (sendTasks.length === 0) sendTasks.push({ features: [], name: "baseline" });
-  const body = {
-    profile: $("f-profile").value,
-    tasks: sendTasks.map(t => ({ features: t.features, ...(t.name ? { name: t.name } : {}) })),
-    n_keys: +$("f-nkeys").value || undefined,
-    updates_per_key: +$("f-updates").value || undefined,
-    n_trials: +$("f-trials").value || undefined,
-    k_repeats: +$("f-krepeats").value || undefined,
-  };
-  $("launch-msg").textContent = "启动中…";
-  try {
-    const r = await fetchJSON("/api/launch", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-    if (r.launched) {
-      $("launch-msg").textContent = `已启动 [${r.profile} / ${r.model}]:${(r.groups||[]).join(", ")}`;
-      document.querySelector('.tab[data-tab="live"]').click();
-      refreshLive();
-    } else { $("launch-msg").textContent = `失败:${r.error}`; }
-  } catch (e) { $("launch-msg").textContent = `错误:${e.message}`; }
-};
+async function renderCompareTable() {
+  const checked = [...document.querySelectorAll("#compare-picker input:checked")].map(e => e.dataset.rundir);
+  const table = $("compare-table");
+  if (!checked.length) { table.innerHTML = '<caption class="muted">勾选上方 run 生成对比</caption>'; return; }
+  const data = await api(`/api/compare?tags=${encodeURIComponent(checked.join(","))}`);
+  if (!Object.keys(data).length) { table.innerHTML = '<caption class="muted">无法加载对比数据</caption>'; return; }
+  const showRE = $("compare-re")?.checked;
+  // 收集所有 group id
+  const gids = new Set();
+  Object.values(data).forEach(r => Object.keys(r.groups || {}).forEach(g => gids.add(g)));
+  const cols = groupInfo.length ? groupInfo.map(g => g.id).filter(g => gids.has(g)) : [...gids].sort();
+  [...gids].sort().forEach(g => { if (!cols.includes(g)) cols.push(g); });
+  // 表头
+  let html = `<thead><tr><th>组 \\ run</th>`;
+  for (const key of checked) {
+    const r = data[key]; if (!r) continue;
+    const tagShort = (r.tag || key).slice(-16);
+    const acc = r.baseline_acc != null ? `<br>基线 ${(r.baseline_acc*100).toFixed(1)}%` : "";
+    html += `<th><div class="cth-tag">${tagShort}</div><div class="cth-meta">${r.model||""}${acc}</div></th>`;
+  }
+  html += "</tr></thead><tbody>";
+  // 表体
+  for (const gid of cols) {
+    let row = `<tr><td>${badge(gid)}</td>`;
+    for (const key of checked) {
+      const g = data[key]?.groups?.[gid];
+      if (!g) { row += `<td class="num muted">—</td>`; continue; }
+      const val = showRE ? (g.re ?? 0) : (g.accuracy ?? 0);
+      const color = val >= 0.5 ? "var(--green)" : val < 0.2 ? "var(--red)" : "var(--text-2)";
+      row += `<td class="num" style="color:${color};font-weight:600">${showRE ? fmt(g.re) : pct(g.accuracy)}</td>`;
+    }
+    html += row + "</tr>";
+  }
+  table.innerHTML = html + "</tbody>";
+}
 
+// ═══════════════════════════════════════════════════════
+// 实时 / 设置 (保留)
+// ═══════════════════════════════════════════════════════
 setInterval(async () => {
-  try {
-    const s = await fetchJSON("/api/status");
-    $("launch-warn").textContent = s.running ? "⚠ 已有 run 在跑,启动会被拒绝" : "";
-    $("launch-btn").disabled = s.running;
-  } catch {}
+  try { const s = await api("/api/status"); const d = $("status-pill"), t = $("status-text"); d.classList.toggle("on", s.running); d.classList.toggle("off", !s.running); t.textContent = s.running ? "运行中" : "空闲"; $("live-state").textContent = s.running ? "运行中" : "空闲"; $("live-group").textContent = s.current_group || "—"; $("live-progress").textContent = s.records_total ? `${s.records_done}/${s.records_total}` : `${s.records_done || 0}`; $("live-tag").textContent = s.latest_run || "—"; $("live-log").textContent = s.log_tail || "（暂无日志）"; $("live-log").scrollTop = $("live-log").scrollHeight; $("force-stop-btn").disabled = !s.running; $("launch-btn") && ($("launch-btn").disabled = s.running); } catch (e) { }
 }, 3000);
 
-// init
-loadRunsList();
-loadProfiles();
-fetchJSON("/api/groups").then(r => { groupInfo = r.groups || []; }).catch(() => {});
+$("force-stop-btn").onclick = async () => {
+  if (!confirm("强制停止并删除当前 run?")) return;
+  try { const r = await api("/api/force-stop", { method: "POST" }); $("force-stop-msg").textContent = r.killed?.length ? `已停止` : "无运行进程"; } catch (e) { }
+};
+
+let profiles = [];
+async function loadProfiles() { try { profiles = (await api("/api/profiles")).profiles || []; } catch (e) { } }
+function renderSettings() {
+  loadProfiles();
+  $("settings-profiles").innerHTML = profiles.map((p, i) => `<div class="profile-row">
+    <span><b>${p.name}</b> · ${p.base_url||"?"} · ${p.model||"?"}</span>
+    <span class="profile-acts">
+      <button class="sm" onclick="fillProfileByIdx(${i})" title="载入编辑">✎</button>
+      <button class="sm" onclick="deleteProfile('${p.name}')" title="删除">✕</button>
+    </span>
+  </div>`).join("");
+}
+function fillProfileByIdx(i) {
+  const p = profiles[i]; if (!p) return;
+  $("p-name").value = p.name || ""; $("p-baseurl").value = p.base_url || "";
+  $("p-apikey").value = p.api_key || ""; $("p-model").value = p.model || "";
+  try { $("p-extra").value = typeof p.extra_body === "string" ? p.extra_body : JSON.stringify(p.extra_body||{}, null, 2); } catch(e) { $("p-extra").value = ""; }
+  $("p-msg").textContent = "已载入,修改后点保存";
+}
+async function deleteProfile(name) {
+  if (!confirm(`删除配置 "${name}"?`)) return;
+  try { await api(`/api/profiles?name=${encodeURIComponent(name)}`, {method:"DELETE"}); $("p-msg").textContent = `已删除 ${name}`; loadProfiles(); renderSettings(); }
+  catch(e) { $("p-msg").textContent = `删除失败:${e}`; }
+}
+$("p-save").onclick = async () => {
+  try {
+    let eb = $("p-extra").value.trim();
+    if (eb) { try { eb = JSON.parse(eb); } catch { /* keep as string */ } }
+    else eb = null;
+    const body = { name: $("p-name").value, base_url: $("p-baseurl").value, api_key: $("p-apikey").value, model: $("p-model").value };
+    if (eb) body.extra_body = eb;
+    await api("/api/profiles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    $("p-msg").textContent = "已保存"; loadProfiles(); renderSettings();
+  } catch (e) { $("p-msg").textContent = `错误:${e}`; }
+};
+
+// ═══════════════════════════════════════════════════════
+// 启动
+// ═══════════════════════════════════════════════════════
+init();

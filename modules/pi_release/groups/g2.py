@@ -1,7 +1,7 @@
 """G2 mock-QA reset (honest version): fake User->Assistant->User dialogue.
 Does NOT inject answers — contrast with G8 (hackreset). Composable mid-stream feature."""
 from ._common import assemble_midstream, MOCK_QA_DIALOGUE
-from pi_test import PITest
+from ..pi_test import PITest
 
 ID = "G2"
 NAME = "mock-qa-reset"
