@@ -2,7 +2,7 @@
 
 > 轻量化模块化 LLM 认知实验平台。加新实验范式 = 在 `modules/` 下建一个文件夹 + 写一个 `BaseModule` 子类 = 自动出现在仪表板。
 
-独立 git 仓库 → [github.com/smartThise/pi-release-exp](https://github.com/smartThise/pi-release-exp) (私有)。
+独立 git 仓库 → [github.com/smartThise/PsyST-Lab](https://github.com/smartThise/PsyST-Lab) (公开)。
 
 ---
 
