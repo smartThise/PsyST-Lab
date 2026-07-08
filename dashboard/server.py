@@ -193,8 +193,7 @@ def _find_runner_pids() -> list[str]:
         if "Z" in stat:  # zombie / defunct — already dead
             continue
         low = cmd.lower()
-        if "launch.py" in cmd and "python" in low:
-            pids.append(pid)
+        if "launch.py" in cmd and "python" in low and "--dashboard" not in cmd:
     return pids
 
 
