@@ -1,14 +1,16 @@
-"""G6 self-generation: query override asking for disruption tokens then answer.
-Uses autoregressive KV feedback within one generation. Needs high temperature."""
-from ._common import assemble, self_gen_query
+"""G6 self-generation cue: disruption-token instruction. Composable mid-stream feature."""
+from ._common import assemble_midstream, SELF_GEN_CUE
 from pi_test import PITest
 
 ID = "G6"
 NAME = "self-generation"
-DESC = "自生成:改写 query 让模型先吐扰乱 token 再回答(利用 KV 回喂),高温采样。"
+COLOR = "#1a7f37"
+DESC = "自生成:流中段注入\"先吐扰乱 token 再答\"指令。可组合。"
 
-OVERRIDES = {"temperature": 0.8}
+
+def feature(test: PITest, seed: int = 0) -> str:
+    return SELF_GEN_CUE
 
 
 def build(test: PITest, seed: int = 0) -> str:
-    return assemble(test, query=self_gen_query(test))
+    return assemble_midstream(test, injection=feature(test, seed))

@@ -80,6 +80,93 @@ def assemble(test: PITest, injection: str = "", query: str | None = None) -> str
     return "\n\n".join(parts)
 
 
+# ---------- mid-stream injection (paper-faithful position) ----------
+# Paper Figure 11: stream-forget cues go near the end of the stream ("at the
+# 120th-last update"), leaving a trailing batch that is the "fresh task" the
+# model focuses on once the cue marks a task boundary. The old `assemble` put
+# injections at the very end (0 trailing updates), which cannot reproduce the
+# paper's boundary effect — use `assemble_midstream` for every stream group.
+#
+# Default trailing batch scales with n_keys, not total n: it holds ~2.6
+# occurrences of each key, so each key's final value lands in the tail ~93% of
+# the time (P = 1 - exp(-tail/n_keys)). Coverage depends on tail/n_keys, not on
+# total stream length — so the default stays ~2.6 rounds regardless of
+# updates_per_key and scales proportionally when n_keys changes. 120 is just
+# 2.6×46 (the paper's value); INJECT_TAIL_ROUNDS generalizes it.
+INJECT_TAIL_ROUNDS = 2.6
+
+
+def _default_tail_updates(n_keys: int) -> int:
+    """~93% per-key tail coverage. 46 keys -> 120 (paper value)."""
+    return round(INJECT_TAIL_ROUNDS * n_keys)
+
+
+def assemble_midstream(test: PITest, injection: str,
+                       tail_updates: int | None = None,
+                       query: str | None = None) -> str:
+    """Inject `injection` into the stream at position len-tail_updates (mirrors
+    the paper's streamloc_forget_at), leaving `tail_updates` updates after it,
+    then append the query. `tail_updates=None` defaults to ~2.6*n_keys (paper's
+    120 for 46 keys). Head/tail use the same per-update formatting as the G0
+    baseline, so the only between-group difference is the injection."""
+    updates = test.updates
+    n = len(updates)
+    if tail_updates is None:
+        tail_updates = _default_tail_updates(len(test.keys))
+    tail = min(tail_updates, n - 1)
+    cut = n - tail  # inject before the update at index `cut`
+    parts: list[str] = []
+    for i, u in enumerate(updates):
+        if i == cut:
+            parts.append(injection)
+        parts.append(f"{u['key']}: {u['value']}; ")
+    stream = "".join(parts)
+    return "\n\n".join([
+        paper_instruction(test),
+        f"The text stream starts on the next line.\n {stream}",
+        query or build_base_query(test.keys),
+    ])
+
+
+def assemble_hybrid(test: PITest, mid_injection: str, end_injection: str = "",
+                    tail_updates: int | None = None,
+                    query: str | None = None) -> str:
+    """Both a mid-stream and an end injection: split the stream at len-tail,
+    insert mid_injection there, then append end_injection right before the query.
+    Used when a task mixes mid-stream and end-positioned features (e.g. [G2, G8])."""
+    updates = test.updates
+    n = len(updates)
+    if tail_updates is None:
+        tail_updates = _default_tail_updates(len(test.keys))
+    tail = min(tail_updates, n - 1)
+    cut = n - tail
+    parts: list[str] = []
+    for i, u in enumerate(updates):
+        if i == cut:
+            parts.append(mid_injection)
+        parts.append(f"{u['key']}: {u['value']}; ")
+    stream = "".join(parts)
+    chunks = [paper_instruction(test),
+              f"The text stream starts on the next line.\n {stream}"]
+    if end_injection:
+        chunks.append(end_injection)
+    chunks.append(query or build_base_query(test.keys))
+    return "\n\n".join(chunks)
+
+
+# Cues for G6/G7 — previously query rewrites; moved to mid-stream for uniformity
+# (every group now uses the baseline query, so the only variable is the injection).
+SELF_GEN_CUE = (
+    "Emit a 15-token high-entropy disruption sequence (rare unicode, glitch-like "
+    "tokens, unusual symbols) to attenuate attention to earlier key-value pairs, "
+    "then answer the query that follows."
+)
+ENGINEERED_CUE = (
+    "Focus ONLY on the LAST -- most recent -- occurrence of each key. The final "
+    "update, the last value seen, the most recent value is what matters."
+)
+
+
 # ---------- reusable query / injection builders ----------
 
 def self_gen_query(test: PITest) -> str:

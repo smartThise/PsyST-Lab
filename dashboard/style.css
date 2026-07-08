@@ -240,11 +240,11 @@ td.num { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   border: 1px solid transparent;
 }
-.tag-g { background: var(--green-soft);  color: var(--green);  border-color: #b4e0bf; }
-.tag-a { background: var(--amber-soft);  color: var(--amber);  border-color: #ecda9c; }
-.tag-r { background: var(--red-soft);    color: var(--red);    border-color: #f3c7c4; }
-.tag-n { background: #eaeef2;            color: var(--muted);  border-color: #d9dee4; }
-.tag-v { background: #f1e1ff33;          color: var(--violet); border-color: #e1d4f0; background: rgba(130,80,223,0.08); }
+.tag-dyn {
+  color: var(--c, var(--muted));
+  background: color-mix(in srgb, var(--c, var(--muted)) 12%, white);
+  border-color: color-mix(in srgb, var(--c, var(--muted)) 28%, white);
+}
 
 /* ---------- 页脚 ---------- */
 footer {
@@ -441,4 +441,48 @@ button.primary:disabled { background: var(--muted-2); cursor: not-allowed; }
   .group-list, .settings-profiles { grid-template-columns: 1fr; }
   .form-grid-5, .form-grid-4 { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ---------- task composer (launch) ---------- */
+#task-composer { display: flex; flex-direction: column; gap: 12px; }
+.palette { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.palette-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-selected { outline: 2px solid var(--c); outline-offset: 1px; }
+.palette-detail { padding: 8px 10px; border: 1px solid #eaeef2; border-radius: 6px; background: #fafbfc; min-height: 24px; }
+.palette-detail-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.palette-detail-name { font-weight: 600; font-size: 13px; }
+.palette-detail-pos { font-size: 11px; }
+.palette-detail-desc { font-size: 13px; color: #57606a; line-height: 1.5; }
+.chip {
+  --c: #57606a;
+  display: inline-flex; align-items: center;
+  padding: 3px 9px; border-radius: 5px; font-size: 12px; font-weight: 600;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 12%, white);
+  border: 1px solid color-mix(in srgb, var(--c) 30%, white);
+}
+.chip-drag { cursor: grab; user-select: none; }
+.chip-drag:active { cursor: grabbing; }
+.chip-end { border-style: dashed; }  /* G8/G9 end-positioned */
+.task-card { border: 1px solid #d9dee4; border-radius: 8px; padding: 10px 12px; background: #fff; }
+.task-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.task-id { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: #8c959f; min-width: 36px; }
+.task-name { flex: 1; font-size: 13px; padding: 4px 7px; border: 1px solid #d9dee4; border-radius: 4px; }
+.task-chips {
+  min-height: 44px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 8px; border: 1px dashed #d9dee4; border-radius: 6px; background: #fafbfc;
+}
+.task-chips.drag-over { border-color: #0969da; background: rgba(9,105,218,0.06); }
+.task-empty { font-style: italic; }
+.chip-in-task { cursor: grab; }
+.chip-in-task:active { cursor: grabbing; }
+.chip-in-task .chip-x { font-weight: 700; opacity: .45; cursor: pointer; padding: 0 0 0 4px; }
+.chip-in-task .chip-x:hover { opacity: 1; }
+button.ghost { background: transparent; border: 1px solid #d9dee4; color: #57606a; border-radius: 5px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+button.ghost:hover { background: #fafbfc; }
+button.tiny { padding: 2px 7px; font-size: 11px; }
+.live-actions { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+button.danger { background: #cf222e; color: #fff; border: 1px solid #cf222e; border-radius: 5px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+button.danger:hover:not(:disabled) { background: #a40e26; }
+button.danger:disabled { background: #eaeef2; color: #8c959f; border-color: #eaeef2; cursor: not-allowed; }
 

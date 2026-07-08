@@ -12,8 +12,14 @@ from pi_test import PITest
 
 ID = "G9"
 NAME = "hackreset-wrong"
-DESC = "★G8 对照:同样的伪造对话,但塞的是错误答案(旧值)。看模型会不会照抄 → 验证 G8 是纯复述还是真检索。"
+COLOR = "#bf4dd6"
+POSITION = "end"
+DESC = "★G8 对照:同样伪造对话但塞错误答案(旧值),末尾注入。验证模型是否无脑照抄。"
+
+
+def feature(test: PITest, seed: int = 0) -> str:
+    return hackreset_injection(test, test.first_values)
 
 
 def build(test: PITest, seed: int = 0) -> str:
-    return assemble(test, injection=hackreset_injection(test, test.first_values))
+    return assemble(test, injection=feature(test, seed))

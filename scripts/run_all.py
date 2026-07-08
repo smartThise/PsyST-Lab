@@ -21,6 +21,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Run the PI-release experiment.")
     ap.add_argument("--groups", nargs="*", default=None,
                     help="Subset of group IDs (e.g. G0 G2 G4). Default: all enabled.")
+    ap.add_argument("--tasks-file", default=None,
+                    help="JSON file: list of tasks [{features:[G1,G2], name?}, ...]. "
+                         "Empty features = baseline. Overrides --groups.")
     ap.add_argument("--all", action="store_true",
                     help="Include disabled groups too.")
     ap.add_argument("--model", default=None, help="override config.model")
@@ -35,7 +38,12 @@ def main() -> None:
     if args.updates is not None: overrides["updates_per_key"] = args.updates
     if args.trials is not None: overrides["n_trials"] = args.trials
     if args.k_repeats is not None: overrides["k_repeats"] = args.k_repeats
-    tag = runner.run(enabled_only=not args.all, group_filter=args.groups, overrides=overrides)
+    if args.tasks_file:
+        import json
+        tasks = json.loads(Path(args.tasks_file).read_text(encoding="utf-8"))
+        tag = runner.run(tasks=tasks, overrides=overrides)
+    else:
+        tag = runner.run(enabled_only=not args.all, group_filter=args.groups, overrides=overrides)
     print(f"\nLaunch the dashboard to view results:\n  python dashboard/server.py\n")
     print(f"Run tag: {tag}")
 

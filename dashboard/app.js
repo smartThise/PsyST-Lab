@@ -17,27 +17,17 @@ document.querySelectorAll(".tab").forEach(btn => {
     btn.classList.add("active");
     $(`tab-${btn.dataset.tab}`).classList.add("active");
     if (btn.dataset.tab === "compare") renderComparePicker();
-    if (btn.dataset.tab === "launch") { renderLaunchGroups(); renderProfileDropdown(); }
+    if (btn.dataset.tab === "launch") { renderTaskComposer(); renderProfileDropdown(); }
     if (btn.dataset.tab === "settings") renderSettingsProfiles();
   };
 });
 
-function tagClass(id) {
-  if (id.startsWith("S"))  return "tag tag-g";
-  if (id.startsWith("G0")) return "tag tag-n";
-  if (id.startsWith("G2")) return "tag tag-g";
-  if (id.startsWith("G4") || id.startsWith("G5")) return "tag tag-r";
-  if (id.startsWith("G6") || id.startsWith("G8")) return "tag tag-v";
-  return "tag tag-a";
-}
 function groupColor(id) {
-  if (id.startsWith("G8")) return "#1f7a8c";
-  if (id.startsWith("G0")) return "#8c959f";
-  if (id.startsWith("G2")) return "#0969da";
-  if (id.startsWith("G4") || id.startsWith("G5")) return "#cf222e";
-  if (id.startsWith("G6")) return "#1a7f37";
-  if (id.startsWith("S"))  return "#0969da";
-  return "#57606a";
+  const g = groupInfo.find(x => x.id === id);
+  return (g && g.color) || "#57606a";
+}
+function badge(id) {
+  return `<span class="tag tag-dyn" style="--c:${groupColor(id)}">${id}</span>`;
 }
 function reColor(re) {
   if (re === null || re === undefined || isNaN(re)) return "var(--muted)";
@@ -59,9 +49,24 @@ async function refreshLive() {
     $("live-tag").textContent = s.latest_run || "—";
     $("live-log").textContent = s.log_tail || "（暂无日志）";
     $("live-log").scrollTop = $("live-log").scrollHeight;
+    const fsb = $("force-stop-btn"); if (fsb) fsb.disabled = !s.running;
   } catch (e) {}
 }
 setInterval(refreshLive, 3000); refreshLive();
+
+$("force-stop-btn").onclick = async () => {
+  if (!confirm("强制停止运行中的进程并删除其 run 目录?此操作不可撤销。")) return;
+  $("force-stop-msg").textContent = "处理中…";
+  try {
+    const r = await fetchJSON("/api/force-stop", {method: "POST"});
+    const parts = [];
+    if (r.killed && r.killed.length) parts.push(`已杀进程 ${r.killed.join(", ")}`);
+    if (r.deleted) parts.push(`已删除 ${r.deleted}`);
+    if (!parts.length) parts.push("没有运行中的进程或未完成目录");
+    $("force-stop-msg").textContent = parts.join(" · ");
+    refreshLive();
+  } catch (e) { $("force-stop-msg").textContent = `错误:${e.message}`; }
+};
 
 // ====================== 结果 ======================
 let charts = {};
@@ -118,7 +123,7 @@ function renderDetail(s) {
   const tb = $("detail-table").querySelector("tbody"); tb.innerHTML="";
   for (const g of (s.groups||[])) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><span class="${tagClass(g.id)}">${g.id}</span></td><td>${g.name}</td>
+    tr.innerHTML = `<td>${badge(g.id)}</td><td>${g.name}</td>
       <td class="num">${pct(g.accuracy)}</td>
       <td class="num" style="color:${reColor(g.re)};font-weight:600">${fmt(g.re)}</td>
       <td class="num">${pct(g.cp)}</td><td class="num">${fmt(g.robustness_delta)}</td><td class="num">${g.n_calls||"—"}</td>`;
@@ -150,7 +155,10 @@ async function renderCompare() {
   const showRE = $("compare-re").checked;
   const gids = new Set();
   Object.values(data).forEach(r=>Object.keys(r.groups).forEach(g=>gids.add(g)));
-  const cols = ["G0","G1","G2","G3","G4","G5","G6","G7","G8","S3","S5"].filter(g=>gids.has(g));
+  // rows = package group order (dynamic, includes G9+) ∩ present, then any leftover
+  if (!groupInfo.length) groupInfo = (await fetchJSON("/api/groups")).groups;
+  const cols = groupInfo.map(g=>g.id).filter(g=>gids.has(g));
+  for (const g of [...gids].sort()) if (!cols.includes(g)) cols.push(g);
   let html = `<thead><tr><th>组 \\ run</th>`;
   for (const tag of checked) {
     const r = data[tag]; if (!r) continue;
@@ -158,7 +166,7 @@ async function renderCompare() {
   }
   html += "</tr></thead><tbody>";
   for (const gid of cols) {
-    let row = `<tr><td><span class="${tagClass(gid)}">${gid}</span></td>`;
+    let row = `<tr><td>${badge(gid)}</td>`;
     for (const tag of checked) {
       const g = data[tag]?.groups?.[gid];
       if (!g) { row += `<td class="num muted">—</td>`; continue; }
@@ -262,28 +270,157 @@ function fmtExtra(eb) {
 
 // ====================== 启动 ======================
 let groupInfo = [];
-async function renderLaunchGroups() {
-  if (!groupInfo.length) groupInfo = (await fetchJSON("/api/groups")).groups;
-  const box = $("launch-groups"); box.innerHTML = "";
-  for (const g of groupInfo) {
-    const lbl = document.createElement("label"); lbl.className = "group-item";
-    const checked = (g.id === "G0") ? "checked" : "";
-    lbl.innerHTML = `
-      <input type="checkbox" value="${g.id}" ${checked}>
-      <div class="group-item-body">
-        <div class="group-item-head"><span class="${tagClass(g.id)}">${g.id}</span><span class="group-item-name">${g.name}</span></div>
-        <div class="group-item-desc">${g.desc}</div>
-      </div>`;
-    box.appendChild(lbl);
+// ---------- task composer (launch) ----------
+// A task = ordered feature list (empty = baseline). Drag features from the
+// palette into a task card; drag chips within/across cards to reorder.
+let composerTasks = [{ features: ["G2"], name: "" }];
+let dragState = null;  // {source: "palette"|"task", taskId?, idx?, feature}
+
+async function renderTaskComposer() {
+  if (!groupInfo.length) {
+    try { groupInfo = (await fetchJSON("/api/groups")).groups || []; } catch {}
+  }
+  renderPalette();
+  renderPaletteDetail();
+  renderTaskList();
+}
+
+function chipColor(g) { return (g && g.color) ? g.color : "#57606a"; }
+
+let selectedFeature = null;
+
+function renderPalette() {
+  const pal = $("palette"); if (!pal) return;
+  pal.innerHTML = "";
+  const feats = groupInfo.filter(g => g.id !== "G0");  // G0 = empty task, not draggable
+  for (const g of feats) {
+    const chip = document.createElement("span");
+    chip.className = "chip chip-drag" + (g.position === "end" ? " chip-end" : "")
+                   + (selectedFeature === g.id ? " chip-selected" : "");
+    chip.style.setProperty("--c", chipColor(g));
+    chip.draggable = true;
+    chip.textContent = g.id;
+    chip.title = "点击查看说明 / 拖到任务框";
+    chip.ondragstart = (e) => { dragState = { source: "palette", feature: g.id }; e.dataTransfer.effectAllowed = "copy"; };
+    chip.ondragend = () => { dragState = null; };
+    chip.onclick = () => {
+      selectedFeature = (selectedFeature === g.id) ? null : g.id;
+      renderPalette();
+      renderPaletteDetail();
+    };
+    pal.appendChild(chip);
   }
 }
 
+function renderPaletteDetail() {
+  const box = $("palette-detail"); if (!box) return;
+  if (!selectedFeature) {
+    box.innerHTML = `<span class="muted small">点击上方 feature 查看说明,或直接拖到任务框。</span>`;
+    return;
+  }
+  const g = groupInfo.find(x => x.id === selectedFeature);
+  if (!g) { box.innerHTML = ""; return; }
+  const posLabel = g.position === "end" ? "末尾注入" : "流中段注入";
+  box.innerHTML = `
+    <div class="palette-detail-head">
+      <span class="chip" style="--c:${chipColor(g)}">${g.id}</span>
+      <span class="palette-detail-name">${g.name}</span>
+      <span class="palette-detail-pos muted small">${posLabel}</span>
+    </div>
+    <div class="palette-detail-desc">${g.desc || "(无说明)"}</div>`;
+}
+
+function renderTaskList() {
+  const list = $("task-list"); if (!list) return;
+  list.innerHTML = "";
+  composerTasks.forEach((task, ti) => {
+    const card = document.createElement("div");
+    card.className = "task-card";
+
+    const head = document.createElement("div");
+    head.className = "task-head";
+    const tid = task.features.length ? task.features.join("+") : "G0";
+    const idSpan = document.createElement("span");
+    idSpan.className = "task-id"; idSpan.textContent = tid;
+    const nameIn = document.createElement("input");
+    nameIn.className = "task-name"; nameIn.placeholder = "任务名(可选)";
+    nameIn.value = task.name || "";
+    nameIn.oninput = (e) => { task.name = e.target.value; };
+    head.appendChild(idSpan); head.appendChild(nameIn);
+    if (composerTasks.length > 1) {
+      const rm = document.createElement("button");
+      rm.className = "ghost tiny"; rm.textContent = "删除";
+      rm.onclick = () => { composerTasks.splice(ti, 1); renderTaskList(); };
+      head.appendChild(rm);
+    }
+    card.appendChild(head);
+
+    const row = document.createElement("div");
+    row.className = "task-chips";
+    row.ondragover = (e) => { e.preventDefault(); row.classList.add("drag-over"); };
+    row.ondragleave = (e) => { if (!row.contains(e.relatedTarget)) row.classList.remove("drag-over"); };
+    row.ondrop = (e) => {
+      e.preventDefault(); row.classList.remove("drag-over");
+      if (!dragState) return;
+      if (dragState.source === "palette") {
+        task.features.push(dragState.feature);
+      } else if (dragState.source === "task") {
+        const fromTi = dragState.taskId, fromIdx = dragState.idx;
+        let dropIdx = task.features.length;
+        const overChip = e.target.closest(".chip-in-task");
+        if (overChip) {
+          const chips = [...row.querySelectorAll(".chip-in-task")];
+          let idx = chips.indexOf(overChip);
+          const r = overChip.getBoundingClientRect();
+          if (e.clientX > r.left + r.width / 2) idx++;  // past midpoint -> insert after
+          dropIdx = idx;
+        }
+        composerTasks[fromTi].features.splice(fromIdx, 1);
+        if (fromTi === ti && fromIdx < dropIdx) dropIdx--;
+        task.features.splice(dropIdx, 0, dragState.feature);
+      }
+      dragState = null;
+      renderTaskList();
+    };
+
+    if (task.features.length === 0) {
+      const ph = document.createElement("span");
+      ph.className = "muted small task-empty";
+      ph.textContent = "空任务 = 基线(无干预)。拖 feature 进来组合。";
+      row.appendChild(ph);
+    } else {
+      task.features.forEach((fid, idx) => {
+        const g = groupInfo.find(x => x.id === fid) || { id: fid };
+        const chip = document.createElement("span");
+        chip.className = "chip chip-in-task" + (g.position === "end" ? " chip-end" : "");
+        chip.style.setProperty("--c", chipColor(g));
+        chip.draggable = true;
+        chip.textContent = fid;
+        chip.ondragstart = (e) => { dragState = { source: "task", taskId: ti, idx, feature: fid }; e.dataTransfer.effectAllowed = "move"; };
+        chip.ondragend = () => { dragState = null; };
+        const x = document.createElement("span");
+        x.className = "chip-x"; x.textContent = "×"; x.title = "移除";
+        x.onclick = (e) => { e.stopPropagation(); task.features.splice(idx, 1); renderTaskList(); };
+        chip.appendChild(x);
+        row.appendChild(chip);
+      });
+    }
+    card.appendChild(row);
+    list.appendChild(card);
+  });
+}
+
+$("add-task").onclick = () => { composerTasks.push({ features: [], name: "" }); renderTaskList(); };
+
 $("launch-btn").onclick = async () => {
-  const groups = [...document.querySelectorAll("#launch-groups input:checked")].map(e=>e.value);
-  if (!groups.includes("G0")) groups.unshift("G0");
+  // send composed tasks; drop empties, but if that leaves nothing, send a baseline-only run
+  const sendTasks = composerTasks
+    .map(t => ({ features: t.features.filter(f => f), name: t.name }))
+    .filter(t => t.features.length > 0);
+  if (sendTasks.length === 0) sendTasks.push({ features: [], name: "baseline" });
   const body = {
     profile: $("f-profile").value,
-    groups,
+    tasks: sendTasks.map(t => ({ features: t.features, ...(t.name ? { name: t.name } : {}) })),
     n_keys: +$("f-nkeys").value || undefined,
     updates_per_key: +$("f-updates").value || undefined,
     n_trials: +$("f-trials").value || undefined,
@@ -293,7 +430,7 @@ $("launch-btn").onclick = async () => {
   try {
     const r = await fetchJSON("/api/launch", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
     if (r.launched) {
-      $("launch-msg").textContent = `已启动[${r.profile} / ${r.model}]:${r.groups.join(", ")}`;
+      $("launch-msg").textContent = `已启动 [${r.profile} / ${r.model}]:${(r.groups||[]).join(", ")}`;
       document.querySelector('.tab[data-tab="live"]').click();
       refreshLive();
     } else { $("launch-msg").textContent = `失败:${r.error}`; }
@@ -311,3 +448,4 @@ setInterval(async () => {
 // init
 loadRunsList();
 loadProfiles();
+fetchJSON("/api/groups").then(r => { groupInfo = r.groups || []; }).catch(() => {});

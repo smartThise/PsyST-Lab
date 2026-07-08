@@ -26,6 +26,8 @@ if _SRC not in sys.path:
 from pi_test import PITest  # noqa: E402
 
 REGISTRY: dict[str, callable] = {}
+FEATURES: dict[str, callable] = {}
+FEATURE_POSITION: dict[str, str] = {}
 GROUP_META: list[dict] = []
 _OVERRIDES: dict[str, dict] = {}
 KNOWN_GROUPS: list[str] = []
@@ -35,6 +37,8 @@ def discover() -> None:
     """Re-scan src/groups/ for modules. Safe to call repeatedly (clears first),
     so the dashboard can pick up newly dropped group files without a restart."""
     REGISTRY.clear()
+    FEATURES.clear()
+    FEATURE_POSITION.clear()
     GROUP_META.clear()
     _OVERRIDES.clear()
     for m in pkgutil.iter_modules(__path__):
@@ -46,10 +50,16 @@ def discover() -> None:
         if not hasattr(mod, "build"):
             continue
         REGISTRY[gid] = mod.build
+        if hasattr(mod, "feature"):
+            FEATURES[gid] = mod.feature
+            FEATURE_POSITION[gid] = getattr(mod, "POSITION", "midstream")
         GROUP_META.append({
             "id": gid,
             "name": getattr(mod, "NAME", gid),
             "desc": getattr(mod, "DESC", ""),
+            "color": getattr(mod, "COLOR", None),
+            "position": getattr(mod, "POSITION", "midstream"),
+            "composable": hasattr(mod, "feature"),
         })
         if hasattr(mod, "OVERRIDES"):
             _OVERRIDES[gid] = dict(mod.OVERRIDES)
@@ -74,3 +84,31 @@ def build_message(group_id: str, test: PITest, seed: int = 0) -> str:
 
 def overrides_for(group_id: str) -> dict:
     return dict(_OVERRIDES.get(group_id, {}))
+
+
+def build_task_message(test: PITest, feature_ids: list[str], seed: int = 0) -> str:
+    """Compose a task = ordered feature list. Empty list = baseline. Mid-stream
+    features concatenate (in feature_ids order) into one block at len-tail;
+    end-positioned features concatenate into one block before the query. Order
+    within each position group follows feature_ids, so [G1,G2] != [G2,G1]."""
+    import groups._common as _common
+    if not feature_ids:
+        return _common.assemble(test)
+    mid: list[str] = []
+    end: list[str] = []
+    for fid in feature_ids:
+        fn = FEATURES.get(fid)
+        if fn is None:
+            raise KeyError(f"unknown feature {fid!r}; known: {list(FEATURES)}")
+        txt = fn(test, seed)
+        if not txt:
+            continue
+        (mid if FEATURE_POSITION.get(fid, "midstream") == "midstream" else end).append(txt)
+    if not mid and not end:
+        return _common.assemble(test)
+    if mid and not end:
+        return _common.assemble_midstream(test, injection="\n".join(mid))
+    if end and not mid:
+        return _common.assemble(test, injection="\n".join(end))
+    return _common.assemble_hybrid(test, mid_injection="\n".join(mid),
+                                   end_injection="\n".join(end))

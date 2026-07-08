@@ -32,6 +32,10 @@
       <div class="kpi"><span class="label">进度</span><span id="live-progress" class="value">—</span></div>
       <div class="kpi"><span class="label">最新 run</span><span id="live-tag" class="value">—</span></div>
     </div>
+    <div class="live-actions">
+      <button id="force-stop-btn" class="danger" disabled>强制停止 + 删除当前 run</button>
+      <span id="force-stop-msg" class="muted small"></span>
+    </div>
     <div class="chart-card">
       <header><h3>实时日志</h3><span class="muted small">每 3s 自动刷新</span></header>
       <pre id="live-log" class="log-viewer">（等待运行…）</pre>
@@ -96,9 +100,17 @@
       <div class="profile-info" id="f-profile-info"></div>
       <div class="form-groups">
         <div class="form-groups-head">
-          <span class="muted small">选择组别(G0 自动加入作为基线)—— 每个组右侧有说明</span>
+          <span class="muted small">拖 feature 到任务框组成任务;空任务 = 基线。多任务并行对比,<b>顺序敏感</b>(G1+G2 ≠ G2+G1)。无基线任务时后端自动补 G0。</span>
         </div>
-        <div id="launch-groups" class="group-list"></div>
+        <div id="task-composer">
+          <div class="palette">
+            <span class="muted small">Features(点击看说明 / 拖入任务)</span>
+            <div id="palette" class="palette-chips"></div>
+          </div>
+          <div id="palette-detail" class="palette-detail"></div>
+          <div id="task-list"></div>
+          <button id="add-task" class="ghost">+ 添加任务</button>
+        </div>
       </div>
       <div class="form-actions">
         <button id="launch-btn" class="primary">启动运行</button>

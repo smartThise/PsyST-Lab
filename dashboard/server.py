@@ -23,6 +23,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import signal
 import subprocess
 import sys
 import webbrowser
@@ -105,11 +107,11 @@ def _load_results(tag: str, limit: int = 2000) -> list[dict]:
 # ----------------------------- live status -----------------------------
 
 def _find_runner_pids() -> list[str]:
-    """PIDs of live run_all.py processes, excluding zombies (state Z).
+    """PIDs of live run_all.py processes (run by python), excluding zombies.
 
-    A run_all.py that finished becomes a zombie until reaped; pgrep would still
-    match it and falsely report 'running'. We use ps + state filter, and rely
-    on SIGCHLD=SIG_IGN (set in main) to auto-reap so zombies rarely linger.
+    Must require BOTH 'python' and 'run_all.py' in the command — otherwise the
+    Claude Code native binary (which carries 'run_all.py' in its session args)
+    gets false-matched and blocks every launch.
     """
     try:
         out = subprocess.run(
@@ -120,15 +122,17 @@ def _find_runner_pids() -> list[str]:
     pids = []
     for line in out.splitlines():
         line = line.strip()
-        if not line or "run_all.py" not in line:
+        if not line:
             continue
         parts = line.split(None, 2)
         if len(parts) < 3:
             continue
-        pid, stat, _cmd = parts
-        if "Z" in stat:  # zombie / defunct — already dead, ignore
+        pid, stat, cmd = parts
+        if "Z" in stat:  # zombie / defunct — already dead
             continue
-        pids.append(pid)
+        low = cmd.lower()
+        if "run_all.py" in cmd and "python" in low:
+            pids.append(pid)
     return pids
 
 
@@ -161,7 +165,7 @@ def _status() -> dict:
 
     current_group = None
     for line in reversed(log_tail.splitlines()):
-        m = re.search(r"=== Group (\S+)", line)
+        m = re.search(r"=== (?:Group|Task) (\S+)", line)
         if m:
             current_group = m.group(1).split("(")[0].strip()
             break
@@ -171,6 +175,28 @@ def _status() -> dict:
         "latest_run": latest_tag, "records_done": records,
         "records_total": total, "log_tail": log_tail,
     }
+
+
+def _force_stop() -> dict:
+    """Force-kill any running run_all.py and delete the newest (incomplete) run dir."""
+    pids = _find_runner_pids()
+    killed = []
+    for pid in pids:
+        try:
+            os.kill(int(pid), signal.SIGKILL)
+            killed.append(pid)
+        except (ProcessLookupError, ValueError, PermissionError):
+            pass
+    deleted = None
+    if RUNS_DIR.exists():
+        subs = [d for d in RUNS_DIR.iterdir() if d.is_dir()]
+        if subs:
+            ld = max(subs, key=lambda d: d.stat().st_mtime)
+            incomplete = not (ld / "summary.json").exists()
+            if pids or incomplete:  # a run was in progress, or a partial folder lingers
+                shutil.rmtree(ld, ignore_errors=True)
+                deleted = ld.name
+    return {"ok": True, "killed": killed, "deleted": deleted}
 
 
 # ----------------------------- compare -----------------------------
@@ -287,16 +313,27 @@ def _launch(body: dict) -> dict:
     else:
         _apply_profile_to_config(profile)
 
-    groups = [g for g in body.get("groups", []) if g in KNOWN_GROUPS]
-    if "G0" not in groups:
-        groups.insert(0, "G0")
-    if not groups:
-        return {"launched": False, "error": "no valid groups selected"}
-
     py = str(ROOT / ".venv" / "bin" / "python")
     if not Path(py).exists():
         py = sys.executable
-    args = [py, str(ROOT / "scripts" / "run_all.py"), "--groups"] + groups
+
+    tasks = body.get("tasks")
+    if tasks:
+        # write the task list to a pending file the subprocess reads
+        tasks_file = ROOT / "runs" / ".tasks_pending.json"
+        tasks_file.parent.mkdir(parents=True, exist_ok=True)
+        tasks_file.write_text(json.dumps(tasks), encoding="utf-8")
+        args = [py, str(ROOT / "scripts" / "run_all.py"), "--tasks-file", str(tasks_file)]
+        selected = [t.get("id") or "+".join(t.get("features", [])) or "G0" for t in tasks]
+    else:
+        groups = [g for g in body.get("groups", []) if g in KNOWN_GROUPS]
+        if not groups:
+            return {"launched": False, "error": "no valid groups/tasks selected"}
+        args = [py, str(ROOT / "scripts" / "run_all.py"), "--groups"] + groups
+        selected = groups
+    # NOTE: do NOT auto-add G0 — the runner reuses a historical G0 baseline
+    # if config matches, and only runs G0 when no match exists.
+
     if profile.get("model"):
         args += ["--model", str(profile["model"])]
     for key, cli in [("n_keys", "--n-keys"), ("updates_per_key", "--updates"),
@@ -315,7 +352,7 @@ def _launch(body: dict) -> dict:
         start_new_session=True,
     )
     return {"launched": True, "profile": profile.get("name"),
-            "model": profile.get("model"), "groups": groups}
+            "model": profile.get("model"), "groups": selected}
 
 
 # ----------------------------- handler -----------------------------
@@ -385,6 +422,8 @@ class Handler(BaseHTTPRequestHandler):
         p = urlparse(self.path).path
         if p == "/api/launch":
             self._send_json(200, _launch(self._read_body()))
+        elif p == "/api/force-stop":
+            self._send_json(200, _force_stop())
         elif p == "/api/profiles":
             body = self._read_body()
             name = (body.get("name") or "").strip()
