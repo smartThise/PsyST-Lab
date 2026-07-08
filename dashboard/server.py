@@ -198,44 +198,62 @@ def _find_runner_pids() -> list[str]:
     return pids
 
 
-def _status() -> dict:
+def _status(module_id: str = "") -> dict:
     pids = _find_runner_pids()
     running = bool(pids)
 
+    # 尝试读模块日志 (按运行中的进程推断模块, 或取最新)
     log_tail = ""
-    if LOG_FILE.exists():
+    log_files = []
+    for mid in (list(_MODULES) if not module_id else [module_id]):
+        lf = Path(f"/tmp/psyst_{mid}.log")
+        if lf.exists():
+            log_files.append((lf, lf.stat().st_mtime, mid))
+    log_files.sort(key=lambda x: -x[1])  # newest first
+    if log_files:
         try:
-            lines = LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = log_files[0][0].read_text(encoding="utf-8", errors="replace").splitlines()
             log_tail = "\n".join(lines[-40:])
         except Exception:
             pass
 
-    latest_tag, records, total = None, 0, None
+    # 扫描 runs/<module>/<tag>/ 找最新 run
+    latest_tag, latest_module, records, total = None, "", 0, None
     if RUNS_DIR.exists():
-        subs = [d for d in RUNS_DIR.iterdir() if d.is_dir()]
-        if subs:
-            ld = max(subs, key=lambda d: d.stat().st_mtime)
-            latest_tag = ld.name
-            rf = ld / "results.jsonl"
-            if rf.exists():
-                records = sum(1 for _ in open(rf, "r", encoding="utf-8"))
-            try:
-                rc = json.loads((ld / "run_config.json").read_text(encoding="utf-8"))
-                total = rc.get("planned_total")
-            except Exception:
-                pass
+        best_mtime = 0
+        for mod_dir in RUNS_DIR.iterdir():
+            if not mod_dir.is_dir() or mod_dir.name.startswith("."):
+                continue
+            if module_id and mod_dir.name != module_id:
+                continue
+            for run_dir in mod_dir.iterdir():
+                if not run_dir.is_dir():
+                    continue
+                mt = run_dir.stat().st_mtime
+                if mt > best_mtime:
+                    best_mtime = mt
+                    latest_tag = run_dir.name
+                    latest_module = mod_dir.name
+                    rf = run_dir / "results.jsonl"
+                    if rf.exists():
+                        records = sum(1 for _ in open(rf, "r", encoding="utf-8"))
+                    try:
+                        rc = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
+                        total = rc.get("planned_total")
+                    except Exception:
+                        pass
 
     current_group = None
     for line in reversed(log_tail.splitlines()):
-        m = re.search(r"=== (?:Group|Task) (\S+)", line)
+        m = re.search(r"=== (?:Group|Task|Condition) (\S+)", line)
         if m:
             current_group = m.group(1).split("(")[0].strip()
             break
 
     return {
         "running": running, "pids": pids, "current_group": current_group,
-        "latest_run": latest_tag, "records_done": records,
-        "records_total": total, "log_tail": log_tail,
+        "latest_run": latest_module + "/" + latest_tag if latest_module else latest_tag,
+        "records_done": records, "records_total": total, "log_tail": log_tail,
     }
 
 
@@ -458,7 +476,8 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/api/runs":
             self._send_json(200, _list_runs())
         elif p == "/api/status":
-            self._send_json(200, _status())
+            mid = qs.get("module", [""])[0]
+            self._send_json(200, _status(mid))
         elif p == "/api/modules":
             self._send_json(200, _list_mods())
         elif p.startswith("/api/spec/"):
