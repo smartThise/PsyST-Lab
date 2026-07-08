@@ -306,8 +306,7 @@ async function renderChecklistPicker() {
     grid = document.createElement("div"); grid.id = "launch-conds";
     grid.className = "cond-grid";
     const form = document.querySelector(".form-groups") || $("tab-launch");
-    const btn = $("launch-btn");
-    form?.insertBefore(grid, btn);
+    form?.appendChild(grid);
   }
   const conds = await api(`/api/groups?module=${selMod}`);
   const list = conds.conditions || [];
