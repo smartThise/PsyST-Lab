@@ -55,6 +55,9 @@
         <span id="meta-pi" class="chip"></span>
         <span id="meta-calls" class="chip"></span>
       </div>
+      <section class="kpis" id="kpi-row"></section>
+      <div id="sweep-charts"></div>
+      <section class="grid" id="chart-grid"></section>
       <div id="toolbar" class="sort-bar">
         <input id="filter-input" type="text" placeholder="🔍 筛选条件..." oninput="renderAll()" class="filter-input">
         <span class="muted small">排序:</span><span id="sort-chips"></span>
@@ -62,9 +65,6 @@
         <button class="sm" onclick="exportCSV()">⬇ CSV</button>
         <span id="col-toggles" class="col-toggles"></span>
       </div>
-      <section class="kpis" id="kpi-row"></section>
-      <div id="sweep-charts"></div>
-      <section class="grid" id="chart-grid"></section>
       <section class="table-card" id="table-section">
         <header><h3 id="table-title">详情</h3></header>
         <div class="table-wrap"><table id="detail-table"><thead></thead><tbody></tbody></table></div>
