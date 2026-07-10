@@ -173,34 +173,36 @@ def _load_results(run_dir: str, limit: int = 2000) -> list[dict]:
 
 # ----------------------------- live status -----------------------------
 
-def _find_runner_pids() -> list[str]:
-    """PIDs of live launch.py processes."""
+def _find_runners() -> list[dict]:
+    """返回正在运行的 launch.py 进程: [{pid, module_id}, ...]"""
     try:
         out = subprocess.run(
             ["ps", "-eo", "pid=,stat=,command="], capture_output=True, text=True, timeout=2
         ).stdout
     except Exception:
         return []
-    pids = []
+    runners = []
     for line in out.splitlines():
         line = line.strip()
-        if not line:
-            continue
+        if not line: continue
         parts = line.split(None, 2)
-        if len(parts) < 3:
-            continue
+        if len(parts) < 3: continue
         pid, stat, cmd = parts
-        if "Z" in stat:  # zombie / defunct — already dead
-            continue
-        low = cmd.lower()
-        if "launch.py" in cmd and "python" in low and "--dashboard" not in cmd:
-            pids.append(pid)
-    return pids
+        if "Z" in stat: continue
+        if "launch.py" not in cmd or "python" not in cmd.lower(): continue
+        if "--dashboard" in cmd: continue
+        # 提取 --module 参数
+        mid = ""
+        m = re.search(r"--module\s+(\S+)", cmd)
+        if m: mid = m.group(1)
+        runners.append({"pid": pid, "module_id": mid})
+    return runners
 
 
 def _status(module_id: str = "") -> dict:
-    pids = _find_runner_pids()
-    running = bool(pids)
+    runners = _find_runners()
+    running = bool(runners)
+    pids = [r["pid"] for r in runners]
 
     # 尝试读模块日志 (按运行中的进程推断模块, 或取最新)
     log_tail = ""
@@ -263,7 +265,8 @@ def _status(module_id: str = "") -> dict:
 
 def _force_stop() -> dict:
     """Force-kill any running launch.py and delete the newest (incomplete) run dir."""
-    pids = _find_runner_pids()
+    runners = _find_runners()
+    pids = [r["pid"] for r in runners]
     killed = []
     for pid in pids:
         try:
@@ -394,8 +397,11 @@ def _apply_profile_to_config(profile: dict) -> None:
 # ----------------------------- launch -----------------------------
 
 def _launch(body: dict) -> dict:
-    if _find_runner_pids():
-        return {"launched": False, "error": "已有 run 在跑,请等它结束"}
+    module_id = body.get("module_id", "pi_release")
+    runners = _find_runners()
+    same_mod = [r for r in runners if r["module_id"] == module_id]
+    if same_mod:
+        return {"launched": False, "error": f"模块 {module_id} 已有 run 在跑,等它结束. 其他模块可并行."}
 
     # resolve profile -> write into config.yaml
     profiles = _load_profiles()
@@ -410,7 +416,6 @@ def _launch(body: dict) -> dict:
     if not Path(py).exists():
         py = sys.executable
 
-    module_id = body.get("module_id", "pi_release")
     conditions = body.get("conditions", [])
     if not conditions:
         return {"launched": False, "error": "no conditions selected"}
