@@ -422,10 +422,13 @@ def _launch(body: dict) -> dict:
         py = sys.executable
 
     conditions = body.get("conditions", [])
-    if not conditions:
+    is_sweep = bool(body.get("updates_list", ""))
+    if not is_sweep and not conditions:
         return {"launched": False, "error": "no conditions selected"}
 
-    args = [py, str(ROOT / "launch.py"), "--module", module_id, "--conditions"] + conditions
+    args = [py, str(ROOT / "launch.py"), "--module", module_id]
+    if conditions:
+        args += ["--conditions"] + conditions
 
     if profile.get("model"):
         args += ["--model", str(profile["model"])]
