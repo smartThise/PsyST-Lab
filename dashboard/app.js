@@ -51,24 +51,39 @@ function sortIndicatorHTML(key) {
   if (idx < 0) return "";
   return `<span class="sort-idx">${idx+1}${sortQueue[idx].dir>0?'▲':'▼'}</span>`;
 }
+let filterText = "", hiddenCols = new Set();
 function renderSortBar() {
-  const bar = $("sort-bar"), chips = $("sort-chips");
+  const bar = $("toolbar"), chips = $("sort-chips"), toggles = $("col-toggles");
   if (!bar || !chips) return;
-  if (!sortQueue.length) { bar.style.display = "none"; return; }
   bar.style.display = "";
   chips.innerHTML = sortQueue.map((s, i) =>
-    `<span class="chip sort-chip" onclick="toggleSort('${s.key}',true)" title="点击反转, Shift+点击添加">${s.key} ${s.dir>0?'▲':'▼'} ${i===0?'(主)':''}</span>`
-  ).join(" ");
+    `<span class="chip sort-chip" onclick="toggleSort('${s.key}',true)" title="反转">${s.key} ${s.dir>0?'▲':'▼'} ${i===0?'(主)':''}</span>`
+  ).join(" ") || '<span class="muted small">(点列表头排序)</span>';
+  // 列显隐开关
+  const cols = spec.columns || [];
+  toggles.innerHTML = cols.map(c =>
+    `<label class="col-toggle" title="显示/隐藏 ${c.label}"><input type="checkbox" ${hiddenCols.has(c.key)?'':'checked'} onchange="toggleCol('${c.key}',this.checked)">${c.label}</label>`
+  ).join("");
 }
+function toggleCol(key, show) { if (show) hiddenCols.delete(key); else hiddenCols.add(key); renderAll(); }
 function renderAll() { renderSortBar(); renderTable(_curItems); renderCharts(_curItems); }
+function filteredItems() {
+  let items = _curItems || [];
+  if (filterText) {
+    const q = filterText.toLowerCase();
+    items = items.filter(g => g.id.toLowerCase().includes(q));
+  }
+  return multiSort(items);
+}
 
 function exportCSV() {
   if (!_curItems.length) return;
   const cols = spec.columns || [{ key: "accuracy", label: "指标", fmt: ".3f" }];
   const sorted = multiSort(_curItems);
-  const header = ["条件", ...cols.map(c => c.label)].join(",");
+  const vc = cols.filter(c => !hiddenCols.has(c.key));
+  const header = ["条件", ...vc.map(c => c.label)].join(",");
   const rows = sorted.map(g =>
-    [g.id, ...cols.map(c => {
+    [g.id, ...vc.map(c => {
       const v = g[c.key]; if (v == null) return "";
       if (c.fmt === "pct") return (v * 100).toFixed(1) + "%";
       if (c.fmt === "d") return Math.round(v);
@@ -96,7 +111,7 @@ async function init() {
 async function switchMod() {
   spec = await api(`/api/spec/${selMod}`);
   groupInfo = spec.launch?.features || [];
-  sortQueue = []; $("sort-bar").style.display = "none";
+  sortQueue = []; $("toolbar") && ($("toolbar").style.display = "none");
   $("footer-module").textContent = selMod;
   loadRuns();
   loadProfiles();
@@ -435,16 +450,18 @@ function renderSurface3D(c, items) {
 // ═══════════════════════════════════════════════════════
 function renderTable(items) {
   const cols = spec.columns || [{ key: "accuracy", label: "指标", fmt: ".3f" }];
-  const sorted = multiSort(items); _curItems = items;
+  filterText = $("filter-input")?.value || "";
+  const sorted = filteredItems(); _curItems = items;
+  const visibleCols = (spec.columns || []).filter(c => !hiddenCols.has(c.key));
   $("table-title").innerHTML = `详情 <button class="sm" onclick="exportCSV()" title="导出 CSV">⬇ 导出</button>`;
   const thead = $("detail-table").querySelector("thead");
-  thead.innerHTML = "<tr><th>条件</th>" + cols.map(c =>
+  thead.innerHTML = "<tr><th>条件</th>" + visibleCols.map(c =>
     `<th class="sortable" onclick="toggleSort('${c.key}')" onauxclick="toggleSort('${c.key}',true);return false" title="点击排序(Shift+点击=多关键字)">${c.label}${sortIndicatorHTML(c.key)}</th>`
   ).join("") + "</tr>";
   const tbody = $("detail-table").querySelector("tbody"); tbody.innerHTML = "";
   for (const g of sorted) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${g.id}</td>` + cols.map(c => `<td class="num">${fmtV(g[c.key], c.fmt)}</td>`).join("");
+    tr.innerHTML = `<td>${g.id}</td>` + visibleCols.map(c => `<td class="num">${fmtV(g[c.key], c.fmt)}</td>`).join("");
     tbody.appendChild(tr);
   }
   renderSortBar();

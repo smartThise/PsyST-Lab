@@ -523,6 +523,12 @@ button.ghost:hover { background: #fafbfc; }
 .sort-chip { cursor: pointer; font-weight: 600; padding: 2px 8px; border-radius: 4px;
   background: var(--accent-soft); color: var(--accent); font-size: 12px; }
 .sort-chip:hover { background: #b6e3ff; }
+.filter-input { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 12px; width: 160px; font-family: inherit; }
+.filter-input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--accent-soft); }
+.col-toggles { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.col-toggle { font-size: 11px; color: var(--text-2); cursor: pointer; display: flex; align-items: center; gap: 2px; }
+.col-toggle input { cursor: pointer; }
 /* heatmap */
 .heatmap { border-collapse: collapse; font-size: 11px; width: 100%; }
 .heatmap th, .heatmap td { padding: 4px 6px; text-align: center; border: 1px solid var(--border-light); }
