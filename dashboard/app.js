@@ -124,6 +124,7 @@ function _n(items) {
     name: g.condition_name || g.name || g.id || "?",
     accuracy: g.accuracy ?? null, re: g.re ?? null, cp: g.cp ?? null,
     robustness_delta: g.robustness_delta ?? null, n_calls: g.n || g.n_calls || 0,
+    updates: g.updates ?? null,
     rpi: g.rpi ?? null, lag1_corr: g.lag1_corr ?? null,
     assimilation_score: g.assimilation_score ?? null,
     mean_accuracy: g.mean_accuracy ?? null,
@@ -222,7 +223,10 @@ function renderCharts(items) {
   };
   const legend = { labels: { color: "#424a53", font: { size: 12 }, boxWidth: 12, boxHeight: 12 } };
 
+  // sweep 数据 (>多个 condition 含 updates 维度) 跳过 basic bar chart, 只看 line-series/heatmap
+  const isSweep = items.length > 10 && items.some(g => g.updates != null);
   for (const c of basicSpecs) {
+    if (isSweep) continue;  // sweep数据bar图无意义
     const ctx = $(`ch-${c.chart_id}`); if (!ctx) continue;
     const vals = sorted.map(g => g[c.data_key] ?? 0);
     const ds = [{

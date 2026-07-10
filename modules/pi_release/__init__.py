@@ -50,8 +50,9 @@ register_chart("pi_release", ChartSpec("sweep_line", "扫参: 精度 vs updates 
     data_key="accuracy", series_key="strategy", x_key="updates", x_label="Updates", y_label="准确率"))
 register_chart("pi_release", ChartSpec("sweep_heat", "扫参: 精度热力图 (updates × position)", "heatmap",
     data_key="accuracy", x_key="updates", y_key="position", x_label="Updates", y_label="位置"))
-# surface3d 仅在扫参数据有值时生效, 先注释, 跑完扫参再开启
-# register_chart("pi_release", ChartSpec("sweep_3d", "扫参: 3D曲面", "surface3d", ...))
+register_chart("pi_release", ChartSpec("sweep_3d", "3D曲面 (updates×position×accuracy)", "surface3d",
+    data_key="accuracy", series_key="strategy", x_key="updates", y_key="position",
+    x_label="Updates", y_label="位置"))
 # 表格列 (新旧兼容)
 register_column("pi_release", ColumnSpec("accuracy", "准确率", fmt="pct"))
 register_column("pi_release", ColumnSpec("re", "RE", fmt=".3f"))
