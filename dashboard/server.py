@@ -200,9 +200,11 @@ def _find_runners() -> list[dict]:
 
 
 def _status(module_id: str = "") -> dict:
-    runners = _find_runners()
-    running = bool(runners)
-    pids = [r["pid"] for r in runners]
+    all_runners = _find_runners()
+    # 该模块是否在运行
+    my_runners = [r for r in all_runners if not module_id or r["module_id"] == module_id]
+    running = bool(all_runners) if not module_id else bool(my_runners)
+    pids = [r["pid"] for r in my_runners]
 
     # 尝试读模块日志 (按运行中的进程推断模块, 或取最新)
     log_tail = ""
@@ -257,7 +259,7 @@ def _status(module_id: str = "") -> dict:
             break
 
     return {
-        "running": running, "running_modules": list(set(r["module_id"] for r in runners if r["module_id"])),
+        "running": running, "running_modules": list(set(r["module_id"] for r in all_runners if r["module_id"])),
         "pids": pids, "current_group": current_group,
         "latest_run": latest_module + "/" + latest_tag if latest_module else latest_tag,
         "records_done": records, "records_total": total, "log_tail": log_tail,
