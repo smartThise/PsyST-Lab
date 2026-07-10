@@ -125,6 +125,8 @@ function _n(items) {
     accuracy: g.accuracy ?? null, re: g.re ?? null, cp: g.cp ?? null,
     robustness_delta: g.robustness_delta ?? null, n_calls: g.n || g.n_calls || 0,
     updates: g.updates ?? null,
+    d_prime: g.d_prime ?? null, hit_rate: g.hit_rate ?? null,
+    false_alarm: g.false_alarm ?? null, direction_tag: g.direction_tag ?? null,
     rpi: g.rpi ?? null, lag1_corr: g.lag1_corr ?? null,
     assimilation_score: g.assimilation_score ?? null,
     mean_accuracy: g.mean_accuracy ?? null,
