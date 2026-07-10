@@ -247,7 +247,7 @@ class RRModule(BaseModule):
                             "category": cats[ti] if ti < len(cats) else "?", "rating": v,
                             "response": resp})
         bias = compute_serial_bias(ratings); dog = compute_doG_amplitude(ratings)
-        return Result(condition_id=task.metadata["pair_id"], scores={
+        return Result(condition_id=task.metadata.get("condition_id") or task.metadata["pair_id"], scores={
             "lag1_corr": bias.get("lag1_corr"),
             "assimilation_score": bias.get("assimilation_score"),
             "direction_tag": 1.0 if bias.get("direction") == "assimilation" else (-1.0 if bias.get("direction") == "contrast" else 0.0),
