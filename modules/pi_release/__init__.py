@@ -64,6 +64,10 @@ class PIModule(BaseModule):
     module_id = "pi_release"
     module_name = "PI Release 实验"
 
+    def __init__(self):
+        super().__init__()
+        self._sweep = False
+
     def setup(self, config: dict[str, Any]) -> None:
         super().setup(config)
         exp = load_yaml(Path(__file__).resolve().parent.parent.parent / "config" / "experiment.yaml")
