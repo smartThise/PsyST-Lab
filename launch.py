@@ -106,7 +106,7 @@ def main() -> None:
     ap.add_argument("--n-back", type=int, default=2, help="n-back 值 (1-6, recall_rating 模块)")
     ap.add_argument("--updates-list", type=str, default="", help="PI sweep: 逗号分隔 updates 列表")
     ap.add_argument("--strategy", type=str, default="", help="PI sweep: A/C/A+C/逗号分隔策略")
-    ap.add_argument("--positions", type=str, default="", help="PI sweep: 逗号分隔位置 (%)")
+    ap.add_argument("--positions", type=str, default="", help="PI sweep: 逗号分隔位置 (pct)")
     ap.add_argument("--dashboard", "-d", action="store_true", help="启动控制面板")
 
     args = ap.parse_args()
