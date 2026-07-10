@@ -87,8 +87,8 @@ class ExperimentRunner:
             run_tag
         """
         if overrides:
-            if "model" in overrides:
-                self.config["model"] = overrides["model"]
+            for k, v in overrides.items():
+                self.config[k] = v
             self.client = self._build_client(overrides)
 
         conditions = self.module.build_conditions()

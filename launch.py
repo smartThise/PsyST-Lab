@@ -57,10 +57,9 @@ def cmd_run(module_id: str, args: argparse.Namespace) -> None:
     print()
 
     overrides = {}
-    if args.model:
-        overrides["model"] = args.model
-    if args.temperature is not None:
-        overrides["temperature"] = args.temperature
+    if args.model: overrides["model"] = args.model
+    if args.temperature is not None: overrides["temperature"] = args.temperature
+    if getattr(args, "n_back", None) is not None: overrides["n_back"] = args.n_back
 
     tag = runner.run(
         condition_filter=args.conditions or None,
@@ -101,6 +100,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=42, help="随机种子")
     ap.add_argument("--trials", type=int, default=1, help="每个条件的 trial 数")
     ap.add_argument("--repeats", "-k", type=int, default=1, help="每个 trial 的重复次数")
+    ap.add_argument("--n-back", type=int, default=2, help="n-back 值 (1-6, recall_rating 模块)")
     ap.add_argument("--dashboard", "-d", action="store_true", help="启动控制面板")
 
     args = ap.parse_args()

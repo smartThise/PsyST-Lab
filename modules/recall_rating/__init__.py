@@ -1,4 +1,8 @@
-"""Recall-Rating 模块."""
+"""n-back × 类别切换 × Rating 模块.
+
+Recall 模式: semantic n-back stream + 中段类别切换 (Gong 2024 × Mewhort 2018)
+Rating 模式: 逐词 valence 评分 (不变)
+"""
 from __future__ import annotations
 import random, re
 from typing import Any
@@ -12,64 +16,69 @@ from core.charts import (
 from .words import load_word_pairs, WordPair
 from .prompts import RECALL_SYSTEM, RATING_SYSTEM
 
-# ═══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════
 # 模块自描述 — 启动面板
-# ═══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════
 register_launch("recall_rating", LaunchConfig(
     composer="checklist",
-    description="勾选要测试的语义类别对。每个词对会同时跑 recall (测 PI 释放) 和 rating (测序列评分偏差) 两种模式。Recall=多轮回忆实验组(第4轮切换类别), 对照=不切换基线, Rating=逐词valence评分。",
+    description="Recall=n-back流+中段类别切换(测WM容量+语义释放). 对照=同类别n-back. Rating=逐词valence评分(测序列同化/对比). n-back值越大越难.",
     extra_params=[
+        {"key": "n_back", "label": "n-back 值", "type": "int", "default": 2},
         {"key": "n_trials", "label": "试次数", "type": "int", "default": 1},
         {"key": "k_repeats", "label": "K Repeats", "type": "int", "default": 1},
         {"key": "seed", "label": "Seed", "type": "int", "default": 42},
     ],
 ))
 
-# ═══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════
 # 模块自描述 — KPI / 图表 / 表格
-# ═══════════════════════════════════════════════════════════════
-register_kpi("recall_rating", KPISpec("n_pairs", "词对数", "n_conditions", aggregate="first", fmt="d"))
-register_kpi("recall_rating", KPISpec("best_rpi", "最大 RPI", "rpi", aggregate="max", fmt=".3f", accent=True))
-register_kpi("recall_rating", KPISpec("bias_dir", "评分偏差方向", "direction_tag", aggregate="first", fmt="str"))
+# ══════════════════════════════════════════════════════
+register_kpi("recall_rating", KPISpec("kpi_dprime", "n-back d'", "d_prime", aggregate="mean", fmt=".3f", accent=True))
+register_kpi("recall_rating", KPISpec("kpi_hitrate", "Hit Rate", "hit_rate", aggregate="mean", fmt="pct"))
+register_kpi("recall_rating", KPISpec("kpi_fa", "False Alarm", "false_alarm", aggregate="mean", fmt="pct"))
 
-register_chart("recall_rating", ChartSpec("rpi_bar", "RPI 实测 vs 预期", "bar", data_key="rpi"))
+register_chart("recall_rating", ChartSpec("dprime_bar", "n-back d' 按词对", "bar", data_key="d_prime"))
 register_chart("recall_rating", ChartSpec("lag1_chart", "评分 Lag-1 相关", "bar", data_key="lag1_corr"))
 
-register_column("recall_rating", ColumnSpec("rpi", "RPI (实测)", fmt=".3f"))
+register_column("recall_rating", ColumnSpec("d_prime", "n-back d'", fmt=".3f"))
+register_column("recall_rating", ColumnSpec("hit_rate", "Hit Rate", fmt="pct"))
+register_column("recall_rating", ColumnSpec("false_alarm", "False Alarm", fmt="pct"))
 register_column("recall_rating", ColumnSpec("lag1_corr", "评分 Lag-1 相关", fmt=".3f"))
-register_column("recall_rating", ColumnSpec("mean_accuracy", "平均回忆率", fmt="pct"))
 register_column("recall_rating", ColumnSpec("assimilation_score", "同化分数", fmt=".3f"))
 register_column("recall_rating", ColumnSpec("n", "样本数", fmt="d"))
 
 
 class RRModule(BaseModule):
     module_id = "recall_rating"
-    module_name = "Recall vs Rating 对比实验"
+    module_name = "n-back × 类别切换 + Rating"
 
     def __init__(self):
         super().__init__()
-        self._pairs = None; self._wpt = 3; self._n_ind = 3; self._n_per = 8; self._dim = "valence"
+        self._pairs = None; self._n_back = 2; self._n_per = 8; self._dim = "valence"
 
     @property
     def pairs(self):
         if self._pairs is None: self._pairs = load_word_pairs()
         return self._pairs
 
+    def setup(self, config: dict[str, Any]) -> None:
+        super().setup(config)
+        self._n_back = int(config.get("n_back", 2))
+
     def build_conditions(self) -> list[Condition]:
         conds = []
         for pid in sorted(self.pairs, key=lambda k: self.pairs[k].rpi_expected):
             wp = self.pairs[pid]
-            rpi_desc = f"释放{wp.rpi_expected*100:.0f}%" if wp.rpi_expected > 0.3 else "几乎无释放"
             conds += [
                 Condition(id=f"{pid}_exp", name="Recall",
                           params={"pair_id": pid, "mode": "recall", "block": "exp",
                                   "group": pid, "group_label": f"{wp.name}",
-                                  "desc": f"{wp.cat_a_name} → {wp.cat_b_name} (第4轮切换, RPI预期{wp.rpi_expected:.2f})",
+                                  "desc": f"n-back流: {wp.cat_a_name}(前半) → {wp.cat_b_name}(后半) 类别切换",
                                   "rpi_expected": wp.rpi_expected}),
                 Condition(id=f"{pid}_ctrl", name="对照",
                           params={"pair_id": pid, "mode": "recall", "block": "ctrl",
                                   "group": pid, "group_label": f"{wp.name}",
-                                  "desc": f"全部{wp.cat_a_name}词, 不切换(基线)",
+                                  "desc": f"n-back流: 全程{wp.cat_a_name}, 不切换(基线)",
                                   "rpi_expected": wp.rpi_expected}),
                 Condition(id=f"{pid}_rating", name="Rating",
                           params={"pair_id": pid, "mode": "rating",
@@ -79,35 +88,69 @@ class RRModule(BaseModule):
             ]
         return conds
 
+    # ══════════════════════════════════════════════════════
+    # Task builders
+    # ══════════════════════════════════════════════════════
     def build_task(self, condition: Condition, seed: int) -> Task:
         p = condition.params; wp = self.pairs[p["pair_id"]]; rng = random.Random(seed)
         if p["mode"] == "recall":
-            return self._recall_task(wp, p["block"], rng)
+            return self._nback_task(wp, p["block"], rng)
         return self._rating_task(wp, rng)
 
-    def _recall_task(self, wp, block, rng):
-        """多轮 recall: 逐 trial 呈现→立即回忆, 前轮 context 累积产生 PI."""
-        from .tasks import generate_recall_design
-        d = generate_recall_design(wp, self._wpt, self._n_ind, rng.randint(0, 100000))
-        trials = d.experimental if block == "exp" else d.control
+    def _nback_task(self, wp, block, rng):
+        """n-back 流 + 类别切换.
+        24 词/block, 8 matches, Gong 2024 规格.
+        experimental: 前半 cat_a → 后半 cat_b
+        control:      全程 cat_a
+        """
+        n = self._n_back; seq_len = 24; switch_pos = 13
+        n_matches = 8
+
+        # 确定哪些位置是 match (> n)
+        match_positions = set(rng.sample(range(n, seq_len), n_matches))
+
+        # 构建流
+        stream = []
+        for pos in range(seq_len):
+            if block == "exp":
+                cat = "a" if pos < switch_pos else "b"
+            else:
+                cat = "a"
+            pool = wp.cat_a_words if cat == "a" else wp.cat_b_words
+
+            if pos in match_positions:
+                word = stream[pos - n]["word"]  # 匹配 n-back 位置
+                is_match = True
+            else:
+                ref = stream[pos - n]["word"] if pos >= n else None
+                # 确保不产生意外 match
+                if len(pool) > 1 and ref:
+                    w = rng.choice([x for x in pool if x != ref])
+                else:
+                    w = rng.choice(pool)
+                word = w
+                is_match = False
+            stream.append({"pos": pos, "word": word, "match": is_match, "cat": cat})
+
+        # 多轮对话: 逐位呈现
         turns = []
-        for t in trials:
-            words_str = ", ".join(t.words)
+        for s in stream:
+            cat_tag = f" [{wp.cat_a_name}]" if s["cat"] == "a" else f" [{wp.cat_b_name}]" if block == "exp" else ""
             turns.append({
-                "user": f"[Trial {t.trial_index}/{len(trials)}] Study these words: {words_str}\nNow recall them exactly. Output only the words, separated by spaces.",
-                "meta": {"trial": t.trial_index, "words": t.words, "cat": t.category},
+                "user": f"Word: {s['word']}{cat_tag}\nn={n}-back: same as {n} steps ago? Output ONLY 'm' or '-'.",
+                "meta": {"pos": s["pos"], "word": s["word"], "match": s["match"], "cat": s["cat"]},
             })
         return Task(
             messages=[{"role": "system", "content": RECALL_SYSTEM}],
             metadata={
                 "multi_turn": True, "turns": turns,
                 "mode": "recall", "pair_id": wp.pair_id, "rpi_expected": wp.rpi_expected,
-                "trials": [{"trial": t.trial_index, "words": t.words, "cat": t.category} for t in trials],
+                "n_back": n, "block": block, "stream": stream,
             },
         )
 
     def _rating_task(self, wp, rng):
-        """多轮 rating: 逐词呈现→立即评分, 前轮评分在 context 里产生序列依赖."""
+        """多轮 rating: 逐词呈现→立即评分 (不变)."""
         from .tasks import generate_rating_sequence
         seq = generate_rating_sequence(wp, self._n_per, self._dim, True, rng.randint(0, 100000))
         turns = []
@@ -127,36 +170,72 @@ class RRModule(BaseModule):
             overrides={"temperature": 0.7},
         )
 
+    # ══════════════════════════════════════════════════════
+    # Scoring
+    # ══════════════════════════════════════════════════════
     def score(self, task: Task, response: str) -> Result:
         turn_log = task.metadata.get("turn_log", [])
-        if task.metadata["mode"] == "recall": return self._score_recall(task, turn_log)
+        if task.metadata["mode"] == "recall": return self._score_nback(task, turn_log)
         return self._score_rating(task, turn_log)
 
-    def _score_recall(self, task, turn_log):
-        """从多轮日志逐 trial 评分."""
-        from .metrics import score_recall_trial, score_intrusions
-        trials = task.metadata["trials"]
-        scores = {}; prev_words = []; accs = []
-        all_responses = []
-        for ti, t in enumerate(trials):
-            resp = turn_log[ti]["response"] if ti < len(turn_log) else ""
-            s = score_recall_trial(t["words"], resp)
-            i = score_intrusions(t["words"], prev_words, resp)
-            scores[f"trial{t['trial']}_acc"] = s["accuracy"]
-            scores[f"trial{t['trial']}_intr"] = i["n_intrusions"]
-            accs.append(s["accuracy"]); prev_words.extend(t["words"])
-            all_responses.append({"trial": t["trial"], "words_presented": t["words"],
-                                  "response": resp, "accuracy": s["accuracy"],
-                                  "intrusions": i["n_intrusions"], "intruded": i["intruded_words"]})
-        if len(accs) >= 4:
-            scores["rpi"] = accs[3] - accs[2]
-            scores["pi_slope"] = (accs[0] - accs[2]) / 2.0
-        scores["mean_accuracy"] = sum(accs) / len(accs) if accs else 0
+    def _score_nback(self, task, turn_log):
+        """n-back 评分: hit rate / false alarm / d' (Gong 2024 标准)."""
+        stream = task.metadata["stream"]
+        n = task.metadata["n_back"]
+        hits = 0; misses = 0; false_alarms = 0; correct_rejects = 0
+
+        entries = []
+        for i, s in enumerate(stream):
+            resp = turn_log[i]["response"].strip().lower() if i < len(turn_log) else ""
+            is_m = "m" in resp and "-" not in resp  # 判定为 m 响应
+            is_match = s["match"]
+            # 排除前 n 个位置 (不可能有 match)
+            if i < n:
+                entries.append({"pos": i, "word": s["word"], "match": is_match,
+                                "response": resp, "type": "skip"})
+                continue
+            if is_match and is_m: hits += 1; t = "hit"
+            elif is_match and not is_m: misses += 1; t = "miss"
+            elif not is_match and is_m: false_alarms += 1; t = "false_alarm"
+            else: correct_rejects += 1; t = "correct_reject"
+            entries.append({"pos": i, "word": s["word"], "match": is_match,
+                            "response": resp, "type": t, "cat": s["cat"]})
+
+        total_match = hits + misses
+        total_nonmatch = false_alarms + correct_rejects
+        hit_rate = hits / total_match if total_match > 0 else 0
+        fa_rate = false_alarms / total_nonmatch if total_nonmatch > 0 else 0
+
+        # d' (带 ±3 cap, 避免极端值)
+        def norm_z(p):
+            """逆正态CDF近似 (Abramowitz & Stegun 26.2.23)."""
+            import math
+            p = max(0.001, min(0.999, p))
+            if p < 0.5: return -norm_z(1 - p)
+            t = math.sqrt(max(0, -2 * math.log(1 - p)))
+            c = [2.515517, 0.802853, 0.010328]
+            d = [1.0, 1.432788, 0.189269, 0.001308]
+            num = c[0] + c[1]*t + c[2]*t*t
+            den = d[0] + d[1]*t + d[2]*t*t + d[3]*t*t*t
+            return t - num / den
+        d_prime = max(-3, min(3, norm_z(hit_rate) - norm_z(fa_rate)))
+
+        # 按类别拆 (前半 vs 后半)
+        first_half = [e for e in entries if e["cat"] == "a" and e["type"] != "skip"]
+        second_half = [e for e in entries if e["cat"] != "a" and e["type"] != "skip"]
+        def _acc(es): return sum(1 for e in es if e["type"] in ("hit","correct_reject"))/len(es) if es else 0
+
+        scores = {
+            "d_prime": d_prime, "hit_rate": hit_rate, "false_alarm": fa_rate,
+            "acc_first_half": _acc(first_half), "acc_second_half": _acc(second_half),
+            "release": _acc(second_half) - _acc(first_half),
+            "hits": hits, "misses": misses, "false_alarms": false_alarms, "correct_rejects": correct_rejects,
+        }
         return Result(condition_id=task.metadata["pair_id"], scores=scores,
-                      raw={"turn_log": all_responses})
+                      raw={"entries": entries, "n_back": n, "block": task.metadata["block"]})
 
     def _score_rating(self, task, turn_log):
-        """从多轮日志逐词提取评分."""
+        """评分模式 (不变)."""
         from .metrics import compute_serial_bias, compute_doG_amplitude
         words = task.metadata["words"]; cats = task.metadata["categories"]
         ratings = []

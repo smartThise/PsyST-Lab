@@ -419,7 +419,7 @@ def _launch(body: dict) -> dict:
 
     if profile.get("model"):
         args += ["--model", str(profile["model"])]
-    for key, cli in [("n_trials", "--trials"), ("k_repeats", "--repeats"), ("seed", "--seed")]:
+    for key, cli in [("n_trials", "--trials"), ("k_repeats", "--repeats"), ("seed", "--seed"), ("n_back", "--n-back")]:
         v = body.get(key)
         if v is not None and v != "":
             try:
