@@ -188,8 +188,9 @@ def _find_runners() -> list[dict]:
         if len(parts) < 3: continue
         pid, stat, cmd = parts
         if "Z" in stat: continue
-        if "launch.py" not in cmd or "python" not in cmd.lower(): continue
+        if "python" not in cmd.lower(): continue
         if "--dashboard" in cmd: continue
+        if "launch.py" not in cmd and "resume_run.py" not in cmd: continue
         # 提取 --module 参数
         mid = ""
         m = re.search(r"(?:--module|-m)\s+(\S+)", cmd)

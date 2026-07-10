@@ -46,8 +46,16 @@ def resume(run_dir: str):
         return
 
     total = sum(r for _, r in to_run)
-    print(f"Resuming {run_path.name}: {total} trials across {len(to_run)} conditions")
-    print(f"(already done: {sum(done.values())} trials)")
+    already = sum(done.values())
+
+    # Setup logging FIRST
+    _log_fp = open(run_path / "run.log", "w", encoding="utf-8")
+    def _log(msg):
+        print(msg, flush=True)
+        _log_fp.write(msg + "\n")
+        _log_fp.flush()
+
+    _log(f"Resuming {run_path.name}: {total} trials across {len(to_run)} conditions (already done: {already})")
 
     # Load module and runner
     mod = get_module(mid)
@@ -56,6 +64,8 @@ def resume(run_dir: str):
     # Override run_dir to this existing directory
     runner._run_dir = run_path
     runner._tag = run_path.name
+    runner._log = _log
+    runner._log_fp = _log_fp
 
     all_conditions = mod.build_conditions()
     cond_map = {c.id: c for c in all_conditions}
@@ -65,7 +75,7 @@ def resume(run_dir: str):
     for cid, remaining in to_run:
         cond = cond_map.get(cid)
         if not cond:
-            print(f"  [skip] unknown condition: {cid}")
+            _log(f"  [skip] unknown condition: {cid}")
             continue
 
         for t in range(done.get(cid, 0), n_trials):
@@ -101,12 +111,12 @@ def resume(run_dir: str):
 
                 scores_str = " ".join(f"{k}={v:.3f}" if isinstance(v, float) else f"{k}={v}"
                                       for k, v in list(result.scores.items())[:4])
-                print(f"  [{done_count}/{sum(c[1] for c in to_run) + done_count}] {cid} trial={t}: {scores_str}")
+                _log(f"  [{done_count}/{sum(c[1] for c in to_run) + done_count}] {cid} trial={t}: {scores_str}")
 
     # Rebuild summary
-    print("Rebuilding summary...")
+    _log("Rebuilding summary...")
     rebuild_summary(run_path, rc, cids, n_trials)
-    print(f"Done. {run_path}")
+    _log(f"Done. {run_path}")
 
 
 def rebuild_summary(run_path, rc, cids, n_trials):

@@ -93,9 +93,9 @@ class RRModule(BaseModule):
     # ══════════════════════════════════════════════════════
     def build_task(self, condition: Condition, seed: int) -> Task:
         p = condition.params; wp = self.pairs[p["pair_id"]]; rng = random.Random(seed)
-        if p["mode"] == "recall":
-            return self._nback_task(wp, p["block"], rng)
-        return self._rating_task(wp, rng)
+        task = self._nback_task(wp, p["block"], rng) if p["mode"] == "recall" else self._rating_task(wp, rng)
+        task.metadata["condition_id"] = condition.id
+        return task
 
     def _nback_task(self, wp, block, rng):
         """n-back 流 + 类别切换.
@@ -231,7 +231,7 @@ class RRModule(BaseModule):
             "release": _acc(second_half) - _acc(first_half),
             "hits": hits, "misses": misses, "false_alarms": false_alarms, "correct_rejects": correct_rejects,
         }
-        return Result(condition_id=task.metadata["pair_id"], scores=scores,
+        return Result(condition_id=task.metadata.get("condition_id") or task.metadata["pair_id"], scores=scores,
                       raw={"entries": entries, "n_back": n, "block": task.metadata["block"]})
 
     def _score_rating(self, task, turn_log):
