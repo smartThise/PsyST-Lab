@@ -191,10 +191,14 @@ def _find_runners() -> list[dict]:
         if "python" not in cmd.lower(): continue
         if "--dashboard" in cmd: continue
         if "launch.py" not in cmd and "resume_run.py" not in cmd: continue
-        # 提取 --module 参数
+        # 提取模块名: launch.py用-m/--module, resume_run.py从路径 runs/<module>/ 提取
         mid = ""
         m = re.search(r"(?:--module|-m)\s+(\S+)", cmd)
-        if m: mid = m.group(1)
+        if m:
+            mid = m.group(1)
+        else:
+            m = re.search(r"runs/(\w+)/", cmd)
+            if m: mid = m.group(1)
         runners.append({"pid": pid, "module_id": mid})
     return runners
 
