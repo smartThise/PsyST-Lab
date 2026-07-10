@@ -196,7 +196,7 @@ function renderCharts(items) {
   const sorted = multiSort(items);
   const chartSpecs = (spec.charts || []).filter(c => c.chart_type !== "kpi" && c.chart_type !== "table");
   const basicSpecs = chartSpecs.filter(c => c.chart_type !== "line-series" && c.chart_type !== "heatmap");
-  const advSpecs = chartSpecs.filter(c => c.chart_type === "line-series" || c.chart_type === "heatmap");
+  const advSpecs = chartSpecs.filter(c => ["line-series","heatmap","surface3d"].includes(c.chart_type));
 
   // 基础图表 (bar, scatter) canvas 容器
   $("chart-grid").innerHTML = basicSpecs.map(c =>
@@ -225,11 +225,13 @@ function renderCharts(items) {
     });
   }
 
-  // 高级图表: line-series + heatmap + surface3d
+  // 高级图表: line-series + heatmap + surface3d (各自 try/catch 防阻断)
   for (const c of advSpecs) {
-    if (c.chart_type === "line-series") renderLineSeries(c, items);
-    if (c.chart_type === "heatmap") renderHeatmap(c, items);
-    if (c.chart_type === "surface3d") renderSurface3D(c, items);
+    try {
+      if (c.chart_type === "line-series") renderLineSeries(c, items);
+      if (c.chart_type === "heatmap") renderHeatmap(c, items);
+      if (c.chart_type === "surface3d") renderSurface3D(c, items);
+    } catch(e) { console.warn('chart render failed:', c.chart_id, e); }
   }
 }
 
