@@ -152,7 +152,10 @@ async function loadRun(idx) {
   $("meta-model").textContent = `模型:${s.model || "?"}`;
   $("meta-pi").textContent = s.pi_test ? `PI:${s.pi_test.n_keys}×${s.pi_test.updates_per_key}` : (s.module_name || selMod);
   $("meta-calls").textContent = `${items.reduce((a, g) => a + (g.n_calls || 0), 0)} 次调用`;
-  _curItems = items; sortQueue = []; renderKpis(items); renderCharts(items); renderTable(items);
+  _curItems = items; sortQueue = [];
+  try { renderKpis(items); } catch(e) { console.warn('KPI render error', e); }
+  try { renderCharts(items); } catch(e) { console.warn('Charts render error', e); }
+  try { renderTable(items); } catch(e) { console.warn('Table render error', e); }
 }
 
 // ═══════════════════════════════════════════════════════
