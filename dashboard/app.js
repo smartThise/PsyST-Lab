@@ -393,7 +393,7 @@ function renderLineSeriesGrid(c, items) {
   container.className = "chart-card";
   const inner = document.createElement("div");
   inner.className = "line-grid";
-  inner.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;padding:12px;";
+  inner.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px;padding:16px;";
 
   // 所有 series 颜色统一
   const allSeries = [...new Set(valid.map(g => g._p[sk]))];
@@ -402,7 +402,8 @@ function renderLineSeriesGrid(c, items) {
 
   splits.forEach(sp => {
     const sub = document.createElement("div");
-    sub.innerHTML = `<h4 style="font-size:12px;color:#656d76;margin:0 0 6px">位置 ${sp}% (尾部剩余)</h4><canvas></canvas>`;
+    sub.style.cssText = "display:flex;flex-direction:column;min-height:280px;";
+    sub.innerHTML = `<h4 style="font-size:12px;color:#656d76;margin:0 0 8px;font-weight:600">位置 ${sp}% (尾部剩余)</h4><div style="flex:1;position:relative;min-height:240px;"><canvas></canvas></div>`;
     inner.appendChild(sub);
     const ctx = sub.querySelector("canvas");
 
@@ -418,14 +419,14 @@ function renderLineSeriesGrid(c, items) {
     const datasets = Object.keys(bySeries).map(s => ({
       label: s, data: bySeries[s].map(p=>p.y),
       borderColor: colors[s], backgroundColor: colors[s]+"22",
-      borderWidth: 2, pointRadius: 3, tension: 0.15,
+      borderWidth: 2, pointRadius: 4, tension: 0.15,
     }));
     charts[`${c.chart_id}_${sp}`] = new Chart(ctx, {
       type: "line", data: { labels: xs, datasets },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { labels: { color:"#424a53", font:{size:10}, boxWidth:10 } } },
-        scales: { x: { ticks:{color:"#57606a",font:{size:10}} }, y: { beginAtZero:false, ticks:{color:"#57606a",font:{size:10}} } }
+        plugins: { legend: { position:"bottom", labels: { color:"#424a53", font:{size:11}, boxWidth:14, boxHeight:14, padding:8 } } },
+        scales: { x: { ticks:{color:"#57606a",font:{size:11}} }, y: { beginAtZero:false, ticks:{color:"#57606a",font:{size:11}} } }
       }
     });
   });
@@ -457,7 +458,7 @@ function renderSurface3D(c, items) {
     return;
   }
 
-  // 按 strategy 分组, 每个策略一个曲面
+  // 所有策略叠加在一个 3D 场景, 用不同颜色区分
   const byStrat = {};
   for (const g of valid) {
     const s = g._p[sk] || "?";
@@ -465,17 +466,8 @@ function renderSurface3D(c, items) {
     byStrat[s].push(g);
   }
 
-  const strategyKeys = Object.keys(byStrat);
-  // 限制显示数量避免太密
-  const showStrats = strategyKeys.slice(0, 9);
-
-  // 构建 Plotly 子图 grid
-  const n = showStrats.length;
-  const cols = Math.min(3, n);
-  const rows = Math.ceil(n / cols);
-
-  const subplots = [];
-  for (const s of showStrats) {
+  const traces = [];
+  Object.keys(byStrat).forEach((s, si) => {
     const pts = byStrat[s];
     const xsAll = [...new Set(pts.map(p => p._p[xk]))].sort((a,b)=>a-b);
     const ysAll = [...new Set(pts.map(p => p._p[yk]))].sort();
@@ -485,43 +477,33 @@ function renderSurface3D(c, items) {
         return f ? (f[dk] ?? 0) : null;
       })
     );
-    subplots.push({
-      type: "surface",
-      x: xsAll, y: ysAll, z,
-      colorscale: "Viridis",
-      name: s,
-      colorbar: { title: dk },
+    traces.push({
+      type: "surface", x: xsAll, y: ysAll, z,
+      name: s, opacity: 0.85,
+      colorscale: [[0, `hsl(${si*60},65%,50%)`], [1, `hsl(${si*60},65%,70%)`]],
+      showscale: false,
       contours: { z: { show: true, usecolormap: true, project: { z: true } } },
     });
-  }
-
-  const traces = [];
-  for (let i = 0; i < subplots.length; i++) {
-    const sp = subplots[i];
-    traces.push({
-      ...sp,
-      scene: `scene${i}`,
-      xaxis: `x${i+1}`, yaxis: `y${i+1}`,
-    });
-  }
+  });
 
   const layout = {
-    grid: { rows, columns: cols, pattern: "independent" },
-    title: c.title,
-    ...Object.fromEntries(traces.map((_, i) => [
-      `scene${i}`,
-      { xaxis_title: c.x_label, yaxis_title: c.y_label, zaxis_title: dk,
-        camera: { eye: { x: 1.5, y: -1.5, z: 1.2 } } }
-    ])),
-    height: rows * 350,
+    scene: {
+      xaxis: { title: c.x_label || xk },
+      yaxis: { title: c.y_label || yk },
+      zaxis: { title: dk },
+      camera: { eye: { x: 1.8, y: -1.8, z: 1.0 } },
+    },
+    legend: { x: 0, y: 1, font: { size: 11 } },
+    margin: { l: 0, r: 0, t: 30, b: 0 },
+    height: 520,
   };
 
   const container = document.createElement("div");
   container.className = "chart-card";
   const divId = `plotly-${c.chart_id}`;
-  container.innerHTML = `<header><h3>${c.title}</h3><span class="muted small">每个策略一个3D曲面: X=${c.x_label} Y=${c.y_label} Z=${dk}</span></header><div id="${divId}"></div>`;
+  container.innerHTML = `<header><h3>${c.title}</h3><span class="muted small">X=${c.x_label||xk} Y=${c.y_label||yk} Z=${dk}, 颜色=策略</span></header><div id="${divId}"></div>`;
   $("sweep-charts").appendChild(container);
-  Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
+  Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: true });
 }
 
 // ═══════════════════════════════════════════════════════
