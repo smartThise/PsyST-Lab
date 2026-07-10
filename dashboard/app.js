@@ -237,7 +237,7 @@ function renderCharts(items) {
   const sorted = multiSort(items);
   const chartSpecs = (spec.charts || []).filter(c => c.chart_type !== "kpi" && c.chart_type !== "table");
   const basicSpecs = chartSpecs.filter(c => c.chart_type !== "line-series" && c.chart_type !== "heatmap");
-  const advSpecs = chartSpecs.filter(c => ["line-series","line-series-grid","heatmap","surface3d"].includes(c.chart_type));
+  const advSpecs = chartSpecs.filter(c => ["line-series","line-series-grid","heatmap","surface3d","grouped-bar-grid"].includes(c.chart_type));
 
   // 清空容器
   $("sweep-charts").innerHTML = "";
@@ -278,6 +278,7 @@ function renderCharts(items) {
       if (c.chart_type === "line-series-grid") renderLineSeriesGrid(c, items);
       if (c.chart_type === "heatmap") renderHeatmap(c, items);
       if (c.chart_type === "surface3d") renderSurface3D(c, items);
+      if (c.chart_type === "grouped-bar-grid") renderGroupedBarGrid(c, items);
     } catch(e) {
       console.error('chart render failed:', c.chart_id, e);
       // 在页面上也显示错误
@@ -437,6 +438,74 @@ function renderLineSeriesGrid(c, items) {
 }
 
 function _uniqueVals(items, key) { return [...new Set(items.map(g => g._p[key]))].sort((a,b)=>a-b); }
+
+function renderGroupedBarGrid(c, items) {
+  const dk = c.data_key || "accuracy";
+  const sk = c.series_key || "strategy";
+  const xk = c.x_key || "position";
+  const spk = c.split_key || "updates";
+
+  const parsed = items.map(g => ({ ...g, _p: _parseCondId(g.id) }));
+  const valid = parsed.filter(g => g._p.updates !== 0);
+  if (!valid.length) return;
+
+  // 按 split_key 分组
+  const splits = {};
+  for (const g of valid) {
+    const sp = g._p[spk];
+    if (!splits[sp]) splits[sp] = [];
+    splits[sp].push(g);
+  }
+  const splitKeys = Object.keys(splits).sort((a,b)=>+a-+b);
+
+  // 所有 series + x 颜色统一
+  const allSeries = [...new Set(valid.map(g => g._p[sk]))];
+  const colors = {};
+  allSeries.forEach((s, i) => colors[s] = `hsl(${i*360/allSeries.length},60%,55%)`);
+  const allX = [...new Set(valid.map(g => g._p[xk]))].sort();
+
+  const container = document.createElement("div");
+  container.className = "chart-card";
+  container.innerHTML = `<header><h3>${c.title}</h3></header>`;
+  const inner = document.createElement("div");
+  inner.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;padding:16px;";
+
+  splitKeys.forEach(sp => {
+    const sub = document.createElement("div");
+    sub.style.cssText = "display:flex;flex-direction:column;min-height:320px;";
+    sub.innerHTML = `<h4 style="font-size:12px;color:#656d76;margin:0 0 8px;font-weight:600">${spk} = ${sp}</h4><div style="flex:1;position:relative;min-height:280px;"><canvas></canvas></div>`;
+    inner.appendChild(sub);
+    const ctx = sub.querySelector("canvas");
+
+    const gs = splits[sp];
+    // datasets = 每个 series 一组柱, 横轴 = x 值
+    const datasets = allSeries.map(s => {
+      const data = allX.map(xv => {
+        const f = gs.find(g => g._p[sk]===s && g._p[xk]===xv);
+        return f ? (f[dk] ?? 0) : 0;
+      });
+      return {
+        label: s, data,
+        backgroundColor: colors[s] + "cc", borderColor: colors[s],
+        borderWidth: 1, borderRadius: 3,
+      };
+    });
+    charts[`${c.chart_id}_${sp}`] = new Chart(ctx, {
+      type: "bar", data: { labels: allX, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position:"bottom", labels:{color:"#424a53",font:{size:11},boxWidth:14,boxHeight:14,padding:8} } },
+        scales: {
+          x: { title:{display:true,text:c.x_label||xk,color:"#656d76"}, ticks:{color:"#57606a",font:{size:10}} },
+          y: { beginAtZero:true, max:1, title:{display:true,text:c.y_label||dk,color:"#656d76"}, ticks:{color:"#57606a",font:{size:10},callback:v=>(v*100)+"%"} }
+        }
+      }
+    });
+  });
+
+  container.appendChild(inner);
+  $("sweep-charts").appendChild(container);
+}
 
 function renderSurface3D(c, items) {
   const xk = c.x_key || "updates";
