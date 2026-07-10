@@ -182,12 +182,25 @@ const LIGHT = {
   tooltip: { backgroundColor: "#fff", borderColor: "#d0d7de", borderWidth: 1, titleColor: "#1f2328", bodyColor: "#424a53", boxPadding: 4, cornerRadius: 6 }
 };
 
+function _parseCondId(cid) {
+  // "G2+G8s_u400_p2.5" → {strategy, updates, position}
+  // "G0_u12_p75x50x2.5"  → same
+  // fallback: return cid as strategy
+  const m = cid.match(/^(.+)_u(\d+)_p(.+)$/);
+  if (!m) return { strategy: cid, updates: 0, position: "" };
+  return { strategy: m[1], updates: parseInt(m[2]), position: m[3] };
+}
+
 function renderCharts(items) {
   Object.values(charts).forEach(c => c?.destroy()); charts = {};
   const sorted = multiSort(items);
   const chartSpecs = (spec.charts || []).filter(c => c.chart_type !== "kpi" && c.chart_type !== "table");
-  $("chart-grid").innerHTML = chartSpecs.map(c =>
-    `<div class="chart-card"><header><h3>${c.title}</h3><span class="sort-hint" onclick="toggleSort('${c.data_key}');return false" title="点击按此指标排序">按${c.data_key}排序</span></header><canvas id="ch-${c.chart_id}" height="120"></canvas></div>`
+  const basicSpecs = chartSpecs.filter(c => c.chart_type !== "line-series" && c.chart_type !== "heatmap");
+  const advSpecs = chartSpecs.filter(c => c.chart_type === "line-series" || c.chart_type === "heatmap");
+
+  // 基础图表 (bar, scatter) canvas 容器
+  $("chart-grid").innerHTML = basicSpecs.map(c =>
+    `<div class="chart-card"><header><h3>${c.title}</h3><span class="sort-hint" onclick="toggleSort('${c.data_key}');return false">按${c.data_key}排序</span></header><canvas id="ch-${c.chart_id}" height="120"></canvas></div>`
   ).join("");
 
   const labels = sorted.map(g => g.id);
@@ -198,28 +211,107 @@ function renderCharts(items) {
   };
   const legend = { labels: { color: "#424a53", font: { size: 12 }, boxWidth: 12, boxHeight: 12 } };
 
-  for (const c of chartSpecs) {
+  for (const c of basicSpecs) {
     const ctx = $(`ch-${c.chart_id}`); if (!ctx) continue;
     const vals = sorted.map(g => g[c.data_key] ?? 0);
-    const datasets = [{
+    const ds = [{
       label: c.y_label || c.data_key, data: vals,
       backgroundColor: colors.map(co => co + "44"), borderColor: colors,
       borderWidth: 1.5, borderRadius: 3
     }];
-    if (c.data_key_secondary) {
-      const vals2 = sorted.map(g => g[c.data_key_secondary] ?? 0);
-      datasets.push({
-        label: c.data_key_secondary, data: vals2,
-        backgroundColor: "rgba(207,34,46,0.15)", borderColor: "#cf222e",
-        borderWidth: 1.5, borderRadius: 3
-      });
-    }
     charts[c.chart_id] = new Chart(ctx, {
-      type: c.chart_type || "bar",
-      data: { labels, datasets },
+      type: c.chart_type || "bar", data: { labels, datasets: ds },
       options: { responsive: true, plugins: { legend, tooltip: LIGHT.tooltip }, scales }
     });
   }
+
+  // 高级图表: line-series + heatmap
+  for (const c of advSpecs) {
+    if (c.chart_type === "line-series") renderLineSeries(c, items);
+    if (c.chart_type === "heatmap") renderHeatmap(c, items);
+  }
+}
+
+function renderLineSeries(c, items) {
+  // 按 series_key 分组, x_key 为 X 轴, data_key 为 Y 值
+  const sk = c.series_key || "strategy";
+  const xk = c.x_key || "updates";
+  const dk = c.data_key || "accuracy";
+
+  // 解析 condition id, 提取 sweep 维度
+  const parsed = items.map(g => ({ ...g, _p: _parseCondId(g.id) }));
+  // 过滤没有 sweep 元数据的项
+  const valid = parsed.filter(g => g._p[xk] !== 0);
+
+  // 按 series 分组, 每组按 x 排序
+  const groups = {};
+  for (const g of valid) {
+    const s = g._p[sk] || "?";
+    if (!groups[s]) groups[s] = [];
+    groups[s].push({ x: g._p[xk], y: g[dk] ?? 0 });
+  }
+  for (const s of Object.keys(groups)) groups[s].sort((a, b) => a.x - b.x);
+
+  const seriesNames = Object.keys(groups);
+  const colors = seriesNames.map((_, i) => `hsl(${i * 360 / seriesNames.length}, 60%, 55%)`);
+
+  const container = document.createElement("div");
+  container.className = "chart-card";
+  container.innerHTML = `<header><h3>${c.title}</h3></header><canvas id="ch-${c.chart_id}" height="120"></canvas>`;
+  $("chart-grid").appendChild(container);
+
+  const ctx = $(`ch-${c.chart_id}`); if (!ctx) return;
+  const datasets = seriesNames.map((s, i) => ({
+    label: s, data: groups[s].map(p => p.y),
+    borderColor: colors[i], backgroundColor: colors[i] + "22",
+    borderWidth: 2, pointRadius: 3, tension: 0.1,
+  }));
+  const allX = [...new Set(valid.map(g => g._p[xk]))].sort((a,b) => a-b);
+  charts[c.chart_id] = new Chart(ctx, {
+    type: "line",
+    data: { labels: allX, datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: "#424a53", font: { size: 11 }, boxWidth: 12 } }, tooltip: LIGHT.tooltip },
+      scales: {
+        x: { title: { display: !!c.x_label, text: c.x_label }, ticks: { color: LIGHT.tick } },
+        y: { beginAtZero: false, title: { display: !!c.y_label, text: c.y_label }, ticks: { color: LIGHT.tick } }
+      }
+    }
+  });
+}
+
+function renderHeatmap(c, items) {
+  // x=updates, y=position, color=accuracy
+  const xk = c.x_key || "updates";
+  const yk = c.y_key || "position";
+  const dk = c.data_key || "accuracy";
+
+  const parsed = items.map(g => ({ ...g, _p: _parseCondId(g.id) }));
+  const valid = parsed.filter(g => g._p[xk] !== 0 && g._p[yk]);
+  const xs = [...new Set(valid.map(g => g._p[xk]))].sort((a,b) => a-b);
+  const ys = [...new Set(valid.map(g => g._p[yk]))].sort();
+
+  // 生成二维矩阵
+  let html = `<table class="heatmap"><thead><tr><th></th>`;
+  for (const x of xs) html += `<th>${x}</th>`;
+  html += `</tr></thead><tbody>`;
+  for (const yv of ys) {
+    html += `<tr><th>${yv}</th>`;
+    for (const xv of xs) {
+      const found = valid.find(g => g._p[xk] === xv && g._p[yk] === yv);
+      const val = found ? (found[dk] ?? 0) : null;
+      const color = val != null ? `hsl(${120 * val}, 50%, ${30 + 40 * (1-val)}%)` : "#eee";
+      html += `<td style="background:${color}" title="${xv},${yv}: ${val!=null?(val*100).toFixed(1)+'%':'—'}">${val!=null?(val*100).toFixed(0):''}</td>`;
+    }
+    html += `</tr>`;
+  }
+  html += `</tbody></table>`;
+
+  const container = document.createElement("div");
+  container.className = "chart-card";
+  container.innerHTML = `<header><h3>${c.title}</h3></header>${html}`;
+  $("chart-grid").appendChild(container);
 }
 
 // ═══════════════════════════════════════════════════════

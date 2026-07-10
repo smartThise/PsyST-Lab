@@ -33,10 +33,11 @@ class ChartSpec:
     """一个图表的声明."""
     chart_id: str
     title: str
-    chart_type: str = "bar"     # "bar" | "scatter" | "line" | "kpi" | "table"
-    data_key: str = ""
-    data_key_secondary: str = ""  # scatter 的 y 轴, 或第二数据集
-    group_by: str = ""
+    chart_type: str = "bar"     # "bar" | "scatter" | "line-series" | "heatmap" | "kpi" | "table"
+    data_key: str = ""          # scores 中的指标 key
+    series_key: str = ""        # line-series: 按 condition_id 的这个字段分组画不同线
+    x_key: str = ""             # line-series/heatmap: X 轴字段
+    y_key: str = ""             # heatmap: Y 轴字段
     x_label: str = ""
     y_label: str = ""
     options: dict[str, Any] = field(default_factory=dict)
@@ -87,8 +88,9 @@ def get_module_spec(mid: str) -> dict:
              "aggregate": k.aggregate, "fmt": k.fmt, "accent": k.accent,
              "exclude_g0": k.exclude_g0} for k in _KPIS.get(mid, [])]
     charts = [{"chart_id": c.chart_id, "title": c.title, "chart_type": c.chart_type,
-               "data_key": c.data_key, "data_key_secondary": c.data_key_secondary,
-               "group_by": c.group_by, "x_label": c.x_label, "y_label": c.y_label,
+               "data_key": c.data_key, "series_key": c.series_key,
+               "x_key": c.x_key, "y_key": c.y_key,
+               "x_label": c.x_label, "y_label": c.y_label,
                "options": c.options} for c in _CHARTS.get(mid, [])]
     columns = [{"key": c.key, "label": c.label, "fmt": c.fmt}
                for c in _COLUMNS.get(mid, [])]

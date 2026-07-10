@@ -519,6 +519,12 @@ button.ghost:hover { background: #fafbfc; }
 .sort-chip { cursor: pointer; font-weight: 600; padding: 2px 8px; border-radius: 4px;
   background: var(--accent-soft); color: var(--accent); font-size: 12px; }
 .sort-chip:hover { background: #b6e3ff; }
+/* heatmap */
+.heatmap { border-collapse: collapse; font-size: 11px; width: 100%; }
+.heatmap th, .heatmap td { padding: 4px 6px; text-align: center; border: 1px solid var(--border-light); }
+.heatmap th { background: var(--bg); font-weight: 600; }
+.heatmap td { min-width: 36px; height: 28px; }
+
 .sort-idx { display: inline-block; font-size: 10px; font-weight: 700; color: var(--accent);
   background: var(--accent-soft); border-radius: 3px; padding: 1px 4px; margin-left: 4px;
   vertical-align: middle; }
