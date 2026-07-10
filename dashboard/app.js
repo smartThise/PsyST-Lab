@@ -152,6 +152,7 @@ async function loadRun(idx) {
   $("meta-model").textContent = `模型:${s.model || "?"}`;
   $("meta-pi").textContent = s.pi_test ? `PI:${s.pi_test.n_keys}×${s.pi_test.updates_per_key}` : (s.module_name || selMod);
   $("meta-calls").textContent = `${items.reduce((a, g) => a + (g.n_calls || 0), 0)} 次调用`;
+  window._runSummary = s;
   _curItems = items; sortQueue = [];
   try { renderKpis(items); } catch(e) { console.warn('KPI render error', e); }
   try { renderCharts(items); } catch(e) { console.warn('Charts render error', e); }
@@ -163,16 +164,23 @@ async function loadRun(idx) {
 // ═══════════════════════════════════════════════════════
 function renderKpis(items) {
   const kpis = spec.kpis || [];
+  const summary = window._runSummary || {};
   $("kpi-row").innerHTML = kpis.map(k => {
-    let vals = items.map(g => g[k.data_key]).filter(v => v != null);
-    if (k.exclude_g0) {
-      const nonG0 = items.filter(g => g.id !== "G0").map(g => g[k.data_key]).filter(v => v != null);
-      if (nonG0.length) vals = nonG0;
+    // baseline_acc 优先从 summary 顶层读
+    let val = null;
+    if (k.data_key === "accuracy" && k.aggregate === "first" && summary.baseline_acc != null) {
+      val = summary.baseline_acc;
+    } else {
+      let vals = items.map(g => g[k.data_key]).filter(v => v != null);
+      if (k.exclude_g0) {
+        const nonG0 = items.filter(g => g.id !== "G0").map(g => g[k.data_key]).filter(v => v != null);
+        if (nonG0.length) vals = nonG0;
+      }
+      val = k.aggregate === "max" ? (vals.length ? Math.max(...vals) : null)
+        : k.aggregate === "mean" ? (vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null)
+        : k.aggregate === "sum" ? (vals.length ? vals.reduce((a, b) => a + b, 0) : null)
+        : vals[0];
     }
-    const val = k.aggregate === "max" ? (vals.length ? Math.max(...vals) : null)
-      : k.aggregate === "mean" ? (vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null)
-      : k.aggregate === "sum" ? (vals.length ? vals.reduce((a, b) => a + b, 0) : null)
-      : vals[0];
     return `<div class="kpi ${k.accent ? 'accent' : ''}"><span class="label">${k.label}</span><span class="value">${fmtV(val, k.fmt)}</span></div>`;
   }).join("");
 }
