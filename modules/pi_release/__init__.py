@@ -171,8 +171,7 @@ class PIModule(BaseModule):
     # ══════════════════════════════════════════
     def score(self, task: Task, response: str) -> Result:
         from .pi_test import PITest as PT
-        upk = task.metadata.get("updates_per_key", self._upk)
-        test = PT(keys=task.metadata["test_keys"], updates_per_key=upk, seed=0)
+        test = PT(keys=task.metadata["test_keys"], updates=[], targets={}, first_values={}, stream_text="")
         test.first_values = task.metadata["test_first_values"]
         acc = metrics.accuracy_over_keys(response, test)
         scores = {"accuracy": acc}
