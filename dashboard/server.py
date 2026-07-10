@@ -39,7 +39,6 @@ RUNS_DIR = ROOT / "runs"
 CONFIG_YAML = ROOT / "config" / "config.yaml"
 PROFILES_YAML = ROOT / "config" / "api_profiles.yaml"
 DASH_DIR = Path(__file__).resolve().parent
-LOG_DIR = ROOT / "logs"
 HOST, PORT = "127.0.0.1", 8765
 
 # ---- 模块系统 ----
@@ -206,22 +205,8 @@ def _status(module_id: str = "") -> dict:
     running = bool(all_runners) if not module_id else bool(my_runners)
     pids = [r["pid"] for r in my_runners]
 
-    # 尝试读模块日志 (按运行中的进程推断模块, 或取最新)
+    # 读最新 run 的日志和进度
     log_tail = ""
-    log_files = []
-    for mid in (list(_MODULES) if not module_id else [module_id]):
-        lf = LOG_DIR / f"{mid}.log"
-        if lf.exists():
-            log_files.append((lf, lf.stat().st_mtime, mid))
-    log_files.sort(key=lambda x: -x[1])  # newest first
-    if log_files:
-        try:
-            lines = log_files[0][0].read_text(encoding="utf-8", errors="replace").splitlines()
-            log_tail = "\n".join(lines[-40:])
-        except Exception:
-            pass
-
-    # 扫描 runs/<module>/<tag>/ 找最新 run
     latest_tag, latest_module, records, total = None, "", 0, None
     if RUNS_DIR.exists():
         best_mtime = 0
@@ -238,14 +223,20 @@ def _status(module_id: str = "") -> dict:
                     best_mtime = mt
                     latest_tag = run_dir.name
                     latest_module = mod_dir.name
+                    # 读 run.log
+                    lf = run_dir / "run.log"
+                    if lf.exists():
+                        try:
+                            lines = lf.read_text(encoding="utf-8", errors="replace").splitlines()
+                            log_tail = "\n".join(lines[-40:])
+                        except Exception: pass
                     rf = run_dir / "results.jsonl"
                     if rf.exists():
                         records = sum(1 for _ in open(rf, "r", encoding="utf-8"))
                     try:
                         rc = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
                         total = rc.get("planned_total")
-                    except Exception:
-                        pass
+                    except Exception: pass
 
     current_group = None
     for line in reversed(log_tail.splitlines()):
@@ -443,12 +434,8 @@ def _launch(body: dict) -> dict:
             except (ValueError, TypeError):
                 pass
 
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_file = LOG_DIR / f"{module_id}.log"
-    log_fp = open(log_file, "a")  # 追加模式, 多次启动不覆盖
     subprocess.Popen(
-        args, cwd=str(ROOT), stdout=log_fp, stderr=subprocess.STDOUT,
-        start_new_session=True,
+        args, cwd=str(ROOT), start_new_session=True,
     )
     return {"launched": True, "profile": profile.get("name"),
             "model": profile.get("model"), "module_id": module_id,

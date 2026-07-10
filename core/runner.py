@@ -104,7 +104,18 @@ class ExperimentRunner:
         self._tag = make_run_tag()
         self._run_dir = RUNS_DIR / self.module.module_id / self._tag
         self._run_dir.mkdir(parents=True, exist_ok=True)
-        print(f"[{self.module.module_id}] run {self._tag}: {len(conditions)}条件 × {n_trials}trials × {k_repeats}repeats, seed={seed}", flush=True)
+
+        # 自动日志: runs/<module>/<tag>/run.log
+        self._log_file = self._run_dir / "run.log"
+        self._log_fp = open(self._log_file, "w", encoding="utf-8")
+
+        def _log(msg):
+            print(msg, flush=True)
+            self._log_fp.write(msg + "\n")
+            self._log_fp.flush()
+
+        self._log = _log
+        self._log(f"[{self.module.module_id}] run {self._tag}: {len(conditions)}条件 × {n_trials}trials × {k_repeats}repeats, seed={seed}")
 
         # 保存 run config
         save_json(self._run_dir / "run_config.json", {
@@ -115,6 +126,7 @@ class ExperimentRunner:
             "n_trials": n_trials,
             "k_repeats": k_repeats,
             "seed": seed,
+            "planned_total": len(conditions) * n_trials * k_repeats,
         })
 
         all_results: list[Result] = []
@@ -143,7 +155,7 @@ class ExperimentRunner:
                     # 逐条件进度日志
                     scores_str = " ".join(f"{k}={v:.3f}" if isinstance(v, float) else f"{k}={v}"
                                           for k, v in list(result.scores.items())[:5])
-                    print(f"  [{done}/{total}] {result.condition_id}: {scores_str}", flush=True)
+                    self._log(f"  [{done}/{total}] {result.condition_id}: {scores_str}")
 
                     # 写入结果 (含多轮日志)
                     record = {
@@ -169,7 +181,8 @@ class ExperimentRunner:
         # 写汇总
         self._write_summary(conditions, all_results, n_trials, k_repeats)
 
-        print(f"\n[runner] 完成 → {self._run_dir}")
+        self._log(f"\n[runner] 完成 → {self._run_dir}")
+        self._log_fp.close()
         return self._tag
 
     # ------------------------------------------------------------------

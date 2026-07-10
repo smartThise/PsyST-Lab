@@ -1,0 +1,29 @@
+[registry] ✓ pi_release — PI Release 实验
+[registry] ✓ recall_rating — n-back × 类别切换 + Rating
+模块: PI Release 实验 (pi_release)
+模型: deepseek-chat
+条件数: 11
+
+[pi_release] run 20260710_215902: 105条件 × 10trials × 1repeats, seed=42
+  [1/1050] G2+G8s_u12_p2.5: accuracy=0.304 updates=12
+  [2/1050] G2+G8s_u12_p2.5: accuracy=0.326 updates=12
+  [3/1050] G2+G8s_u12_p2.5: accuracy=0.239 updates=12
+  [4/1050] G2+G8s_u12_p2.5: accuracy=0.283 updates=12
+  [5/1050] G2+G8s_u12_p2.5: accuracy=0.283 updates=12
+  [6/1050] G2+G8s_u12_p2.5: accuracy=0.304 updates=12
+  [7/1050] G2+G8s_u12_p2.5: accuracy=0.348 updates=12
+  [8/1050] G2+G8s_u12_p2.5: accuracy=0.283 updates=12
+  [9/1050] G2+G8s_u12_p2.5: accuracy=0.239 updates=12
+  [10/1050] G2+G8s_u12_p2.5: accuracy=0.304 updates=12
+  [11/1050] G2+G8s_u12_p50: accuracy=0.870 updates=12
+  [12/1050] G2+G8s_u12_p50: accuracy=0.891 updates=12
+  [13/1050] G2+G8s_u12_p50: accuracy=0.935 updates=12
+  [14/1050] G2+G8s_u12_p50: accuracy=0.891 updates=12
+  [15/1050] G2+G8s_u12_p50: accuracy=0.870 updates=12
+  [16/1050] G2+G8s_u12_p50: accuracy=0.935 updates=12
+  [17/1050] G2+G8s_u12_p50: accuracy=0.957 updates=12
+  [18/1050] G2+G8s_u12_p50: accuracy=0.913 updates=12
+  [19/1050] G2+G8s_u12_p50: accuracy=0.891 updates=12
+  [20/1050] G2+G8s_u12_p50: accuracy=0.891 updates=12
+  [21/1050] G2+G8s_u12_p75: accuracy=0.717 updates=12
+  [22/1050] G2+G8s_u12_p75: accuracy=0.935 updates=12
