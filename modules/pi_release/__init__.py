@@ -134,6 +134,7 @@ class PIModule(BaseModule):
             messages=[{"role": "user", "content": msg}],
             metadata={"group_id": condition.id, "test_keys": list(test.keys),
                       "test_first_values": dict(test.first_values),
+                      "test_targets": dict(test.targets),
                       "updates_per_key": upk},
         )
 
@@ -161,6 +162,7 @@ class PIModule(BaseModule):
             metadata={
                 "group_id": sname, "test_keys": list(test.keys),
                 "test_first_values": dict(test.first_values),
+                "test_targets": dict(test.targets),
                 "updates_per_key": upk, "position_pcts": pcts,
                 "position_key": pkey, "strategy": sname,
             },
@@ -171,8 +173,10 @@ class PIModule(BaseModule):
     # ══════════════════════════════════════════
     def score(self, task: Task, response: str) -> Result:
         from .pi_test import PITest as PT
-        test = PT(keys=task.metadata["test_keys"], updates=[], targets={}, first_values={}, stream_text="")
-        test.first_values = task.metadata["test_first_values"]
+        test = PT(keys=task.metadata["test_keys"], updates=[],
+                  targets=task.metadata.get("test_targets", {}),
+                  first_values=task.metadata.get("test_first_values", {}),
+                  stream_text="")
         acc = metrics.accuracy_over_keys(response, test)
         scores = {"accuracy": acc}
         if self._sweep:
