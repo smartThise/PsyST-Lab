@@ -74,12 +74,14 @@ def resume(run_dir: str):
 
     for cid, remaining in to_run:
         cond = cond_map.get(cid)
+        if not cond and hasattr(mod, "rebuild_condition"):
+            cond = mod.rebuild_condition(cid)
         if not cond:
             _log(f"  [skip] unknown condition: {cid}")
             continue
 
         for t in range(done.get(cid, 0), n_trials):
-            task = mod.build_task(cond, seed + all_conditions.index(cond) * 1000 + t)
+            task = mod.build_task(cond, seed + hash(cid) % 100000 + t)
 
             for rep in range(k_repeats):
                 temp = task.overrides.get("temperature", runner.client.temperature)

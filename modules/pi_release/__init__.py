@@ -91,6 +91,21 @@ class PIModule(BaseModule):
         # 模式判断
         self._sweep = bool(self._updates_list)
 
+    def rebuild_condition(self, cid: str) -> "Condition | None":
+        """从 condition id 反向重建 sweep Condition (供 resume 使用).
+        格式: {strategy}_u{upk}_p{poskey}  poskey 中 + → x
+        """
+        import re as _re
+        m = _re.match(r'^(.+)_u(\d+)_p(.+)$', cid)
+        if not m:
+            return None
+        strategy, upk, pkey = m.group(1), int(m.group(2)), m.group(3).replace('x', '+')
+        return Condition(
+            id=cid, name=f"{strategy} @{upk}upk pos={pkey}",
+            params={"strategy": strategy, "updates_per_key": upk,
+                    "position_pcts": _parse_position(pkey), "position_key": pkey},
+        )
+
     def _parse_strategies(self, s: str) -> list[str]:
         return [x.strip() for x in s.split(",") if x.strip()]
 
@@ -125,7 +140,8 @@ class PIModule(BaseModule):
     # ══════════════════════════════════════════
     def build_task(self, condition: Condition, seed: int) -> Task:
         p = condition.params
-        if self._sweep:
+        # sweep 模式: condition 自带 strategy + position_pcts (不依赖 self._sweep, 供 resume)
+        if "strategy" in p and "position_pcts" in p:
             return self._build_sweep_task(p, seed)
         # 旧模式
         upk = self._upk
