@@ -419,13 +419,14 @@ def _launch(body: dict) -> dict:
 
     if profile.get("model"):
         args += ["--model", str(profile["model"])]
+    _STR_ARGS = {"updates_list", "strategy", "positions"}
     for key, cli in [("n_trials", "--trials"), ("k_repeats", "--repeats"), ("seed", "--seed"),
                      ("n_back", "--n-back"), ("updates_list", "--updates-list"),
                      ("strategy", "--strategy"), ("positions", "--positions")]:
         v = body.get(key)
         if v is not None and v != "":
             try:
-                args += [cli, str(int(v))]
+                args += [cli, str(v) if key in _STR_ARGS else str(int(v))]
             except (ValueError, TypeError):
                 pass
 

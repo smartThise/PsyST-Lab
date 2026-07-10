@@ -253,9 +253,11 @@ async function renderLaunch() {
 
   // 隐藏 PI-specific 旧字段, 渲染泛用 extra_params
   const formGrid = document.querySelector(".form-grid-5");
-  if (formGrid) formGrid.innerHTML = extra.map(p =>
-    `<label>${p.label}<input id="f-${p.key}" type="number" value="${p.default || 1}"></label>`
-  ).join("");
+  if (formGrid) formGrid.innerHTML = extra.map(p => {
+    const itype = p.type === "str" ? "text" : "number";
+    const def = p.default != null ? p.default : (itype === "number" ? 1 : "");
+    return `<label>${p.label}<input id="f-${p.key}" type="${itype}" value="${def}"></label>`;
+  }).join("");
 
   // Profile dropdown
   try {
@@ -281,7 +283,7 @@ async function renderLaunch() {
       if (!checked.length) { $("launch-msg").textContent = "请选择至少一个条件"; return; }
       body.conditions = checked;
     }
-    extra.forEach(p => { const v = $(`f-${p.key}`)?.value; if (v) body[p.key] = +v; });
+    extra.forEach(p => { const v = $(`f-${p.key}`)?.value; if (v) body[p.key] = p.type === "str" ? v : +v; });
     $("launch-msg").textContent = "启动中…";
     try {
       const r = await api("/api/launch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
