@@ -168,6 +168,63 @@ ENGINEERED_CUE = (
 )
 
 
+# ---------- multi-position injection (sweep mode) ----------
+
+def assemble_multi_position(
+    test: PITest,
+    instruction: str,
+    feature_ids: list[str],
+    position_pcts: list[float],
+    seed: int = 0,
+    query: str | None = None,
+) -> str:
+    """在流的多个位置注入同一干预文本。
+
+    position_pcts: [75, 2.5] = 尾部剩 75% 处插一次, 剩 2.5% 处再插一次
+    feature_ids: 策略特征列表, 如 ["G2", "G8s"], 各 feature 的文本拼接为一次注入
+    """
+    from . import FEATURES
+    from ..pi_test import build_base_query
+
+    # 获取每个 feature 的注入文本并拼接
+    inj_parts = []
+    for fid in feature_ids:
+        fn = FEATURES.get(fid)
+        if fn:
+            txt = fn(test, seed)
+            if txt:
+                inj_parts.append(txt)
+    injection = "\n\n".join(inj_parts) if inj_parts else ""
+
+    updates = test.updates
+    n = len(updates)
+
+    # 按注入位置排序 (pct 从小到大 = 流内位置从前往后)
+    cuts = sorted([max(1, min(n - 1, int(n * (1 - pct / 100.0)))) for pct in position_pcts])
+
+    # 去重
+    unique = []
+    for c in cuts:
+        if not unique or c > unique[-1] + 1:
+            unique.append(c)
+    cuts = unique
+
+    # 分段拼接流
+    parts = []
+    prev = 0
+    for cut in cuts:
+        chunk = "".join(f"{u['key']}: {u['value']}; " for u in updates[prev:cut])
+        parts.append(chunk)
+        parts.append(f"\n\n{injection}\n\n")
+        prev = cut
+    chunk = "".join(f"{u['key']}: {u['value']}; " for u in updates[prev:])
+    parts.append(chunk)
+
+    stream = "".join(parts)
+
+    return f"{instruction}\n\nThe text stream starts on the next line.\n {stream}\n\n{query or build_base_query(test.keys)}"
+
+
 # ---------- reusable query / injection builders ----------
 
 def self_gen_query(test: PITest) -> str:

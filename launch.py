@@ -60,6 +60,9 @@ def cmd_run(module_id: str, args: argparse.Namespace) -> None:
     if args.model: overrides["model"] = args.model
     if args.temperature is not None: overrides["temperature"] = args.temperature
     if getattr(args, "n_back", None) is not None: overrides["n_back"] = args.n_back
+    for k in ("updates_list", "strategy", "positions"):
+        v = getattr(args, k, "") or ""
+        if v: overrides[k] = v
 
     tag = runner.run(
         condition_filter=args.conditions or None,
@@ -101,6 +104,9 @@ def main() -> None:
     ap.add_argument("--trials", type=int, default=1, help="每个条件的 trial 数")
     ap.add_argument("--repeats", "-k", type=int, default=1, help="每个 trial 的重复次数")
     ap.add_argument("--n-back", type=int, default=2, help="n-back 值 (1-6, recall_rating 模块)")
+    ap.add_argument("--updates-list", type=str, default="", help="PI sweep: 逗号分隔 updates 列表")
+    ap.add_argument("--strategy", type=str, default="", help="PI sweep: A/C/A+C/逗号分隔策略")
+    ap.add_argument("--positions", type=str, default="", help="PI sweep: 逗号分隔位置 (%)")
     ap.add_argument("--dashboard", "-d", action="store_true", help="启动控制面板")
 
     args = ap.parse_args()
