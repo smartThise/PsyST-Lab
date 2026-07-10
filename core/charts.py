@@ -38,6 +38,7 @@ class ChartSpec:
     series_key: str = ""        # line-series: 按 condition_id 的这个字段分组画不同线
     x_key: str = ""             # line-series/heatmap: X 轴字段
     y_key: str = ""             # heatmap: Y 轴字段
+    split_key: str = ""         # line-series-grid: 按此字段拆成多张子图
     x_label: str = ""
     y_label: str = ""
     options: dict[str, Any] = field(default_factory=dict)
@@ -89,7 +90,7 @@ def get_module_spec(mid: str) -> dict:
              "exclude_g0": k.exclude_g0} for k in _KPIS.get(mid, [])]
     charts = [{"chart_id": c.chart_id, "title": c.title, "chart_type": c.chart_type,
                "data_key": c.data_key, "series_key": c.series_key,
-               "x_key": c.x_key, "y_key": c.y_key,
+               "x_key": c.x_key, "y_key": c.y_key, "split_key": c.split_key,
                "x_label": c.x_label, "y_label": c.y_label,
                "options": c.options} for c in _CHARTS.get(mid, [])]
     columns = [{"key": c.key, "label": c.label, "fmt": c.fmt}

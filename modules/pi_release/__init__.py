@@ -45,12 +45,12 @@ register_kpi("pi_release", KPISpec("avg_cp", "平均 CP", "cp", aggregate="mean"
 # 基础图表 (兼容旧数据 + 扫参)
 register_chart("pi_release", ChartSpec("acc_bar", "准确率按条件", "bar", data_key="accuracy"))
 register_chart("pi_release", ChartSpec("re_bar", "RE 按条件", "bar", data_key="re"))
-# 扫参图表: 多策略曲线 (仅扫参数据有效, 旧数据无 sweep 维度则跳过)
-register_chart("pi_release", ChartSpec("sweep_line", "扫参: 精度 vs updates (pos=2.5%)", "line-series",
-    data_key="accuracy", series_key="strategy", x_key="updates", x_label="Updates", y_label="准确率"))
-register_chart("pi_release", ChartSpec("sweep_heat", "扫参: 精度热力图 (updates × position)", "heatmap",
-    data_key="accuracy", x_key="updates", y_key="position", x_label="Updates", y_label="位置"))
-register_chart("pi_release", ChartSpec("sweep_3d", "3D曲面 (updates×position×accuracy)", "surface3d",
+# 扫参图表: 按位置分组的多策略折线 (前端自动按 position 拆成多张)
+register_chart("pi_release", ChartSpec("sweep_lines", "策略曲线 (按位置分组)", "line-series-grid",
+    data_key="accuracy", series_key="strategy", x_key="updates", split_key="position",
+    x_label="Updates", y_label="准确率"))
+# 扫参图表: 3D 曲面 (updates × position × accuracy, 按策略分子图)
+register_chart("pi_release", ChartSpec("sweep_3d", "3D 曲面 (updates × position × accuracy)", "surface3d",
     data_key="accuracy", series_key="strategy", x_key="updates", y_key="position",
     x_label="Updates", y_label="位置"))
 # 表格列 (新旧兼容)

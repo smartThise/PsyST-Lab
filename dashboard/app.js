@@ -237,7 +237,7 @@ function renderCharts(items) {
   const sorted = multiSort(items);
   const chartSpecs = (spec.charts || []).filter(c => c.chart_type !== "kpi" && c.chart_type !== "table");
   const basicSpecs = chartSpecs.filter(c => c.chart_type !== "line-series" && c.chart_type !== "heatmap");
-  const advSpecs = chartSpecs.filter(c => ["line-series","heatmap","surface3d"].includes(c.chart_type));
+  const advSpecs = chartSpecs.filter(c => ["line-series","line-series-grid","heatmap","surface3d"].includes(c.chart_type));
 
   // 清空容器
   $("sweep-charts").innerHTML = "";
@@ -275,6 +275,7 @@ function renderCharts(items) {
   for (const c of advSpecs) {
     try {
       if (c.chart_type === "line-series") renderLineSeries(c, items);
+      if (c.chart_type === "line-series-grid") renderLineSeriesGrid(c, items);
       if (c.chart_type === "heatmap") renderHeatmap(c, items);
       if (c.chart_type === "surface3d") renderSurface3D(c, items);
     } catch(e) {
@@ -365,6 +366,72 @@ function renderHeatmap(c, items) {
   const container = document.createElement("div");
   container.className = "chart-card";
   container.innerHTML = `<header><h3>${c.title}</h3></header>${html}`;
+  $("sweep-charts").appendChild(container);
+}
+
+function renderLineSeriesGrid(c, items) {
+  const sk = c.series_key || "strategy";
+  const xk = c.x_key || "updates";
+  const spk = c.split_key || "position";
+  const dk = c.data_key || "accuracy";
+
+  const parsed = items.map(g => ({ ...g, _p: _parseCondId(g.id) }));
+  const valid = parsed.filter(g => g._p[xk] !== 0);
+  if (!valid.length) return;
+
+  // 按 split_key 分组
+  const groups = {};
+  for (const g of valid) {
+    const sp = g._p[spk] || "?";
+    if (!groups[sp]) groups[sp] = [];
+    groups[sp].push(g);
+  }
+  const splits = Object.keys(groups).sort();
+
+  // 容器: 标题 + 子图网格
+  const container = document.createElement("div");
+  container.className = "chart-card";
+  const inner = document.createElement("div");
+  inner.className = "line-grid";
+  inner.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;padding:12px;";
+
+  // 所有 series 颜色统一
+  const allSeries = [...new Set(valid.map(g => g._p[sk]))];
+  const colors = {};
+  allSeries.forEach((s, i) => colors[s] = `hsl(${i*360/allSeries.length},65%,50%)`);
+
+  splits.forEach(sp => {
+    const sub = document.createElement("div");
+    sub.innerHTML = `<h4 style="font-size:12px;color:#656d76;margin:0 0 6px">位置 ${sp}% (尾部剩余)</h4><canvas></canvas>`;
+    inner.appendChild(sub);
+    const ctx = sub.querySelector("canvas");
+
+    const gs = groups[sp];
+    const bySeries = {};
+    gs.forEach(g => {
+      const s = g._p[sk];
+      if (!bySeries[s]) bySeries[s] = [];
+      bySeries[s].push({ x: g._p[xk], y: g[dk] ?? 0 });
+    });
+    Object.values(bySeries).forEach(arr => arr.sort((a,b)=>a.x-b.x));
+    const xs = [...new Set(gs.map(g=>g._p[xk]))].sort((a,b)=>a-b);
+    const datasets = Object.keys(bySeries).map(s => ({
+      label: s, data: bySeries[s].map(p=>p.y),
+      borderColor: colors[s], backgroundColor: colors[s]+"22",
+      borderWidth: 2, pointRadius: 3, tension: 0.15,
+    }));
+    charts[`${c.chart_id}_${sp}`] = new Chart(ctx, {
+      type: "line", data: { labels: xs, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color:"#424a53", font:{size:10}, boxWidth:10 } } },
+        scales: { x: { ticks:{color:"#57606a",font:{size:10}} }, y: { beginAtZero:false, ticks:{color:"#57606a",font:{size:10}} } }
+      }
+    });
+  });
+
+  container.innerHTML = `<header><h3>${c.title}</h3></header>`;
+  container.appendChild(inner);
   $("sweep-charts").appendChild(container);
 }
 
