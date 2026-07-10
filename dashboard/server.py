@@ -39,7 +39,7 @@ RUNS_DIR = ROOT / "runs"
 CONFIG_YAML = ROOT / "config" / "config.yaml"
 PROFILES_YAML = ROOT / "config" / "api_profiles.yaml"
 DASH_DIR = Path(__file__).resolve().parent
-LOG_FILE = Path("/tmp/pi_run.log")
+LOG_DIR = ROOT / "logs"
 HOST, PORT = "127.0.0.1", 8765
 
 # ---- 模块系统 ----
@@ -210,7 +210,7 @@ def _status(module_id: str = "") -> dict:
     log_tail = ""
     log_files = []
     for mid in (list(_MODULES) if not module_id else [module_id]):
-        lf = Path(f"/tmp/psyst_{mid}.log")
+        lf = LOG_DIR / f"{mid}.log"
         if lf.exists():
             log_files.append((lf, lf.stat().st_mtime, mid))
     log_files.sort(key=lambda x: -x[1])  # newest first
@@ -440,9 +440,9 @@ def _launch(body: dict) -> dict:
             except (ValueError, TypeError):
                 pass
 
-    log_file = Path(f"/tmp/psyst_{module_id}.log")
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    log_fp = open(log_file, "w")
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_file = LOG_DIR / f"{module_id}.log"
+    log_fp = open(log_file, "a")  # 追加模式, 多次启动不覆盖
     subprocess.Popen(
         args, cwd=str(ROOT), stdout=log_fp, stderr=subprocess.STDOUT,
         start_new_session=True,
