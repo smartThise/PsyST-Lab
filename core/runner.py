@@ -89,6 +89,7 @@ class ExperimentRunner:
         if overrides:
             for k, v in overrides.items():
                 self.config[k] = v
+            self.module.setup(self.config)  # re-apply config so module sees overrides
             self.client = self._build_client(overrides)
 
         conditions = self.module.build_conditions()
