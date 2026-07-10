@@ -326,7 +326,7 @@ function renderSurface3D(c, items) {
 
   const parsed = items.map(g => ({ ...g, _p: _parseCondId(g.id) }));
   const valid = parsed.filter(g => g._p[xk] !== 0 && g._p[yk]);
-  if (!valid.length) return;
+  if (!valid.length || typeof Plotly === "undefined") return;  // 无扫参数据或 Plotly 未加载, 不渲染空壳
 
   // 按 strategy 分组, 每个策略一个曲面
   const byStrat = {};
@@ -401,7 +401,7 @@ function renderSurface3D(c, items) {
 function renderTable(items) {
   const cols = spec.columns || [{ key: "accuracy", label: "指标", fmt: ".3f" }];
   const sorted = multiSort(items); _curItems = items;
-  $("table-title").textContent = "详情";
+  $("table-title").innerHTML = `详情 <button class="sm" onclick="exportCSV()" title="导出 CSV">⬇ 导出</button>`;
   const thead = $("detail-table").querySelector("thead");
   thead.innerHTML = "<tr><th>条件</th>" + cols.map(c =>
     `<th class="sortable" onclick="toggleSort('${c.key}')" onauxclick="toggleSort('${c.key}',true);return false" title="点击排序(Shift+点击=多关键字)">${c.label}${sortIndicatorHTML(c.key)}</th>`
