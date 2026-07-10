@@ -132,7 +132,7 @@ class PIModule(BaseModule):
         msg = groups.build_message(condition.id, test, seed=seed)
         return Task(
             messages=[{"role": "user", "content": msg}],
-            metadata={"group_id": condition.id, "test_keys": list(test.keys),
+            metadata={"condition_id": condition.id, "group_id": condition.id, "test_keys": list(test.keys),
                       "test_first_values": dict(test.first_values),
                       "test_targets": dict(test.targets),
                       "updates_per_key": upk},
@@ -160,6 +160,7 @@ class PIModule(BaseModule):
         return Task(
             messages=[{"role": "user", "content": msg}],
             metadata={
+                "condition_id": f"{sname}_u{upk}_p{pkey.replace('+','x')}",
                 "group_id": sname, "test_keys": list(test.keys),
                 "test_first_values": dict(test.first_values),
                 "test_targets": dict(test.targets),
@@ -181,5 +182,5 @@ class PIModule(BaseModule):
         scores = {"accuracy": acc}
         if self._sweep:
             scores["updates"] = task.metadata.get("updates_per_key", 0)
-        return Result(condition_id=task.metadata.get("group_id", "?"),
+        return Result(condition_id=task.metadata.get("condition_id") or task.metadata.get("group_id", "?"),
                       scores=scores, raw={"response": response})
