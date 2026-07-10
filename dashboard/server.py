@@ -264,9 +264,11 @@ def _status(module_id: str = "") -> dict:
     }
 
 
-def _force_stop() -> dict:
-    """Force-kill any running launch.py and delete the newest (incomplete) run dir."""
+def _force_stop(module_id: str = "") -> dict:
+    """Force-kill running launch.py for the given module, delete its newest incomplete run dir."""
     runners = _find_runners()
+    if module_id:
+        runners = [r for r in runners if r["module_id"] == module_id]
     pids = [r["pid"] for r in runners]
     killed = []
     for pid in pids:
@@ -531,7 +533,8 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/launch":
             self._send_json(200, _launch(self._read_body()))
         elif p == "/api/force-stop":
-            self._send_json(200, _force_stop())
+            mid = qs.get("module", [""])[0]
+            self._send_json(200, _force_stop(mid))
         elif p == "/api/profiles":
             body = self._read_body()
             name = (body.get("name") or "").strip()
