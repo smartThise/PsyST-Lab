@@ -257,7 +257,8 @@ def _status(module_id: str = "") -> dict:
             break
 
     return {
-        "running": running, "pids": pids, "current_group": current_group,
+        "running": running, "running_modules": list(set(r["module_id"] for r in runners if r["module_id"])),
+        "pids": pids, "current_group": current_group,
         "latest_run": latest_module + "/" + latest_tag if latest_module else latest_tag,
         "records_done": records, "records_total": total, "log_tail": log_tail,
     }

@@ -689,7 +689,9 @@ async function renderCompareTable() {
 // 实时 / 设置 (保留)
 // ═══════════════════════════════════════════════════════
 setInterval(async () => {
-  try { const s = await api(`/api/status?module=${selMod}`); const d = $("status-pill"), t = $("status-text"); d.classList.toggle("on", s.running); d.classList.toggle("off", !s.running); t.textContent = s.running ? "运行中" : "空闲"; $("live-state").textContent = s.running ? "运行中" : "空闲"; $("live-group").textContent = s.current_group || "—"; $("live-progress").textContent = s.records_total ? `${s.records_done}/${s.records_total}` : `${s.records_done || 0}`; $("live-tag").textContent = s.latest_run || "—"; $("live-log").textContent = s.log_tail || "（暂无日志）"; $("live-log").scrollTop = $("live-log").scrollHeight; $("force-stop-btn").disabled = !s.running; $("launch-btn") && ($("launch-btn").disabled = s.running); } catch (e) { }
+  try { const s = await api(`/api/status?module=${selMod}`); const d = $("status-pill"), t = $("status-text"); d.classList.toggle("on", s.running); d.classList.toggle("off", !s.running); t.textContent = s.running ? "运行中" : "空闲"; $("live-state").textContent = s.running ? "运行中" : "空闲"; $("live-group").textContent = s.current_group || "—"; $("live-progress").textContent = s.records_total ? `${s.records_done}/${s.records_total}` : `${s.records_done || 0}`; $("live-tag").textContent = s.latest_run || "—"; $("live-log").textContent = s.log_tail || "（暂无日志）"; $("live-log").scrollTop = $("live-log").scrollHeight;     const myRunning = (s.running_modules || []).includes(selMod);
+    $("force-stop-btn").disabled = !s.running;
+    $("launch-btn") && ($("launch-btn").disabled = myRunning); } catch (e) { }
 }, 3000);
 
 $("force-stop-btn").onclick = async () => {
