@@ -176,6 +176,6 @@ class PIModule(BaseModule):
         acc = metrics.accuracy_over_keys(response, test)
         scores = {"accuracy": acc}
         if self._sweep:
-            scores["updates"] = upk
+            scores["updates"] = task.metadata.get("updates_per_key", 0)
         return Result(condition_id=task.metadata.get("group_id", "?"),
                       scores=scores, raw={"response": response})
