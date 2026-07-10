@@ -192,7 +192,7 @@ class RRModule(BaseModule):
             # 排除前 n 个位置 (不可能有 match)
             if i < n:
                 entries.append({"pos": i, "word": s["word"], "match": is_match,
-                                "response": resp, "type": "skip"})
+                                "response": resp, "type": "skip", "cat": s["cat"]})
                 continue
             if is_match and is_m: hits += 1; t = "hit"
             elif is_match and not is_m: misses += 1; t = "miss"
