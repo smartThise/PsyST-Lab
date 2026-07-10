@@ -193,7 +193,7 @@ def _find_runners() -> list[dict]:
         if "--dashboard" in cmd: continue
         # 提取 --module 参数
         mid = ""
-        m = re.search(r"--module\s+(\S+)", cmd)
+        m = re.search(r"(?:--module|-m)\s+(\S+)", cmd)
         if m: mid = m.group(1)
         runners.append({"pid": pid, "module_id": mid})
     return runners

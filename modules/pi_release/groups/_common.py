@@ -196,6 +196,10 @@ def assemble_multi_position(
                 inj_parts.append(txt)
     injection = "\n\n".join(inj_parts) if inj_parts else ""
 
+    # 无注入 = 直接用 assemble (避免空分隔符污染流)
+    if not injection:
+        return assemble(test, query=query)
+
     updates = test.updates
     n = len(updates)
 
