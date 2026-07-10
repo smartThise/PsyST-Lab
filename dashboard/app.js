@@ -210,6 +210,8 @@ function renderCharts(items) {
   const basicSpecs = chartSpecs.filter(c => c.chart_type !== "line-series" && c.chart_type !== "heatmap");
   const advSpecs = chartSpecs.filter(c => ["line-series","heatmap","surface3d"].includes(c.chart_type));
 
+  // 清空容器
+  $("sweep-charts").innerHTML = "";
   // 基础图表 (bar, scatter) canvas 容器
   $("chart-grid").innerHTML = basicSpecs.map(c =>
     `<div class="chart-card"><header><h3>${c.title}</h3><span class="sort-hint" onclick="toggleSort('${c.data_key}');return false">按${c.data_key}排序</span></header><canvas id="ch-${c.chart_id}" height="120"></canvas></div>`
@@ -252,7 +254,7 @@ function renderCharts(items) {
       const errDiv = document.createElement("div");
       errDiv.className = "chart-card";
       errDiv.innerHTML = `<header><h3>${c.title}</h3></header><p class=\"muted small\" style=\"color:var(--red);padding:16px\">渲染失败: ${e.message}</p>`;
-      $("chart-grid").appendChild(errDiv);
+      $("sweep-charts").appendChild(errDiv);
     }
   }
 }
@@ -281,7 +283,7 @@ function renderLineSeries(c, items) {
   const container = document.createElement("div");
   container.className = "chart-card";
   container.innerHTML = `<header><h3>${c.title}</h3></header><canvas id="ch-${c.chart_id}" height="120"></canvas>`;
-  $("chart-grid").appendChild(container);
+  $("sweep-charts").appendChild(container);
 
   const ctx = $(`ch-${c.chart_id}`); if (!ctx) return;
   const datasets = seriesNames.map((s, i) => ({
@@ -334,7 +336,7 @@ function renderHeatmap(c, items) {
   const container = document.createElement("div");
   container.className = "chart-card";
   container.innerHTML = `<header><h3>${c.title}</h3></header>${html}`;
-  $("chart-grid").appendChild(container);
+  $("sweep-charts").appendChild(container);
 }
 
 function _uniqueVals(items, key) { return [...new Set(items.map(g => g._p[key]))].sort((a,b)=>a-b); }
@@ -355,7 +357,7 @@ function renderSurface3D(c, items) {
     const container = document.createElement("div");
     container.className = "chart-card";
     container.innerHTML = `<header><h3>${c.title}</h3></header><p class=\"muted small\" style=\"padding:16px\">3D曲面需要X≥2且Y≥2维数据。当前Y=\"${yk}\"仅有${ys.length}个值(${ys.join(',')})。跑完位置扫描后自动激活。</p>`;
-    $("chart-grid").appendChild(container);
+    $("sweep-charts").appendChild(container);
     return;
   }
 
@@ -422,7 +424,7 @@ function renderSurface3D(c, items) {
   container.className = "chart-card";
   const divId = `plotly-${c.chart_id}`;
   container.innerHTML = `<header><h3>${c.title}</h3><span class="muted small">每个策略一个3D曲面: X=${c.x_label} Y=${c.y_label} Z=${dk}</span></header><div id="${divId}"></div>`;
-  $("chart-grid").appendChild(container);
+  $("sweep-charts").appendChild(container);
   Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
 }
 

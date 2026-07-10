@@ -191,6 +191,10 @@ main {
   gap: 12px;
   margin-bottom: 18px;
 }
+#sweep-charts { display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; }
+#sweep-charts .chart-card { width: 100%; }
+#sweep-charts canvas { max-height: 400px; }
+
 .chart-card, .table-card {
   background: var(--card);
   border: 1px solid var(--border-light);
