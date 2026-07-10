@@ -523,6 +523,8 @@ button.ghost:hover { background: #fafbfc; }
 .sort-chip { cursor: pointer; font-weight: 600; padding: 2px 8px; border-radius: 4px;
   background: var(--accent-soft); color: var(--accent); font-size: 12px; }
 .sort-chip:hover { background: #b6e3ff; }
+.sort-key-select { padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 12px; background: var(--card); cursor: pointer; }
 .filter-input { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   font-size: 12px; width: 160px; font-family: inherit; }
 .filter-input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--accent-soft); }

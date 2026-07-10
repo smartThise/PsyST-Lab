@@ -59,8 +59,9 @@
       <div id="sweep-charts"></div>
       <section class="grid" id="chart-grid"></section>
       <div id="toolbar" class="sort-bar">
-        <input id="filter-input" type="text" placeholder="🔍 筛选条件..." oninput="renderAll()" class="filter-input">
-        <span class="muted small">排序:</span><span id="sort-chips"></span>
+        <input id="filter-input" type="text" placeholder="🔍 筛选..." oninput="renderAll()" class="filter-input">
+        <select id="sort-key-select" class="sort-key-select"><option value="">+ 排序关键字</option></select>
+        <span id="sort-chips"></span>
         <button class="sm" onclick="sortQueue=[];renderAll();">✕</button>
         <button class="sm" onclick="exportCSV()">⬇ CSV</button>
         <span id="col-toggles" class="col-toggles"></span>

@@ -15,19 +15,22 @@ let sortQueue = [];  // [{key, dir: 1|-1}], 第一项=第一关键字
 let _curItems = [];
 
 function toggleSort(key, shift) {
+  const cols = spec.columns || [];
+  const col = cols.find(c => c.key === key);
+  const label = col ? col.label : key;
   const idx = sortQueue.findIndex(s => s.key === key);
   if (shift) {
     if (idx >= 0) {
       if (sortQueue[idx].dir > 0) sortQueue[idx].dir = -1;
       else sortQueue.splice(idx, 1);
-    } else { sortQueue.push({key, dir: 1}); }
+    } else { sortQueue.push({key, label, dir: 1}); }
   } else {
     if (idx === 0) {
       if (sortQueue[0].dir > 0) sortQueue[0].dir = -1;
       else sortQueue.shift();
     } else if (idx > 0) {
       const [item] = sortQueue.splice(idx, 1); sortQueue.unshift(item);
-    } else { sortQueue.unshift({key, dir: 1}); }
+    } else { sortQueue.unshift({key, label, dir: 1}); }
   }
   renderAll();
 }
@@ -56,9 +59,18 @@ function renderSortBar() {
   const bar = $("toolbar"), chips = $("sort-chips"), toggles = $("col-toggles");
   if (!bar || !chips) return;
   bar.style.display = "";
+  // 排序下拉
+  const sel = $("sort-key-select");
+  if (sel) {
+    const cols = spec.columns || [];
+    sel.innerHTML = '<option value="">+ 排序关键字</option>' + cols.map(c =>
+      `<option value="${c.key}">${c.label} (${c.key})</option>`
+    ).join("");
+    sel.onchange = () => { if (sel.value) { toggleSort(sel.value); sel.value = ""; } };
+  }
   chips.innerHTML = sortQueue.map((s, i) =>
-    `<span class="chip sort-chip" onclick="toggleSort('${s.key}',true)" title="反转">${s.key} ${s.dir>0?'▲':'▼'} ${i===0?'(主)':''}</span>`
-  ).join(" ") || '<span class="muted small">(点列表头排序)</span>';
+    `<span class="chip sort-chip" onclick="toggleSort('${s.key}',true)" title="反转">${s.label||s.key} ${s.dir>0?'▲':'▼'} ${i===0?'(主)':''}</span>`
+  ).join(" ") || '<span class="muted small">(下拉添加排序)</span>';
   // 列显隐开关
   const cols = spec.columns || [];
   toggles.innerHTML = cols.map(c =>
@@ -456,7 +468,7 @@ function renderTable(items) {
   $("table-title").innerHTML = `详情 <button class="sm" onclick="exportCSV()" title="导出 CSV">⬇ 导出</button>`;
   const thead = $("detail-table").querySelector("thead");
   thead.innerHTML = "<tr><th>条件</th>" + visibleCols.map(c =>
-    `<th class="sortable" onclick="toggleSort('${c.key}')" onauxclick="toggleSort('${c.key}',true);return false" title="点击排序(Shift+点击=多关键字)">${c.label}${sortIndicatorHTML(c.key)}</th>`
+    `<th class="sortable">${c.label}${sortIndicatorHTML(c.key)}</th>`
   ).join("") + "</tr>";
   const tbody = $("detail-table").querySelector("tbody"); tbody.innerHTML = "";
   for (const g of sorted) {
