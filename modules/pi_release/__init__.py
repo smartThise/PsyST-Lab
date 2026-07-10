@@ -50,6 +50,10 @@ register_chart("pi_release", ChartSpec("sweep_line", "精度 vs updates (pos=2.5
 # 扫参图表: 热力图 (x=updates, y=position, color=accuracy)
 register_chart("pi_release", ChartSpec("sweep_heat", "精度热力图 (updates × position)", "heatmap",
     data_key="accuracy", x_key="updates", y_key="position", x_label="Updates", y_label="位置(尾部%)"))
+# 扫参图表: 3D曲面 (x=updates, y=position, z=accuracy, 每个策略一个子图)
+register_chart("pi_release", ChartSpec("sweep_3d", "3D曲面 (updates × position × 准确率)", "surface3d",
+    data_key="accuracy", series_key="strategy", x_key="updates", y_key="position",
+    x_label="Updates", y_label="位置"))
 register_column("pi_release", ColumnSpec("accuracy", "准确率", fmt="pct"))
 register_column("pi_release", ColumnSpec("re", "RE", fmt=".3f"))
 register_column("pi_release", ColumnSpec("updates", "Updates", fmt="d"))

@@ -225,10 +225,11 @@ function renderCharts(items) {
     });
   }
 
-  // 高级图表: line-series + heatmap
+  // 高级图表: line-series + heatmap + surface3d
   for (const c of advSpecs) {
     if (c.chart_type === "line-series") renderLineSeries(c, items);
     if (c.chart_type === "heatmap") renderHeatmap(c, items);
+    if (c.chart_type === "surface3d") renderSurface3D(c, items);
   }
 }
 
@@ -312,6 +313,83 @@ function renderHeatmap(c, items) {
   container.className = "chart-card";
   container.innerHTML = `<header><h3>${c.title}</h3></header>${html}`;
   $("chart-grid").appendChild(container);
+}
+
+function renderSurface3D(c, items) {
+  // X=updates, Y=position, Z=data_key, 固定 strategy (从 options.strategy 取, 或自动选第一个)
+  const xk = c.x_key || "updates";
+  const yk = c.y_key || "position";
+  const dk = c.data_key || "accuracy";
+  const sk = c.series_key || "strategy";
+
+  const parsed = items.map(g => ({ ...g, _p: _parseCondId(g.id) }));
+  const valid = parsed.filter(g => g._p[xk] !== 0 && g._p[yk]);
+
+  // 按 strategy 分组, 每个策略一个曲面
+  const byStrat = {};
+  for (const g of valid) {
+    const s = g._p[sk] || "?";
+    if (!byStrat[s]) byStrat[s] = [];
+    byStrat[s].push(g);
+  }
+
+  const strategyKeys = Object.keys(byStrat);
+  // 限制显示数量避免太密
+  const showStrats = strategyKeys.slice(0, 9);
+
+  // 构建 Plotly 子图 grid
+  const n = showStrats.length;
+  const cols = Math.min(3, n);
+  const rows = Math.ceil(n / cols);
+
+  const subplots = [];
+  for (const s of showStrats) {
+    const pts = byStrat[s];
+    const xsAll = [...new Set(pts.map(p => p._p[xk]))].sort((a,b)=>a-b);
+    const ysAll = [...new Set(pts.map(p => p._p[yk]))].sort();
+    const z = ysAll.map(yv =>
+      xsAll.map(xv => {
+        const f = pts.find(p => p._p[xk]===xv && p._p[yk]===yv);
+        return f ? (f[dk] ?? 0) : null;
+      })
+    );
+    subplots.push({
+      type: "surface",
+      x: xsAll, y: ysAll, z,
+      colorscale: "Viridis",
+      name: s,
+      colorbar: { title: dk },
+      contours: { z: { show: true, usecolormap: true, project: { z: true } } },
+    });
+  }
+
+  const traces = [];
+  for (let i = 0; i < subplots.length; i++) {
+    const sp = subplots[i];
+    traces.push({
+      ...sp,
+      scene: `scene${i}`,
+      xaxis: `x${i+1}`, yaxis: `y${i+1}`,
+    });
+  }
+
+  const layout = {
+    grid: { rows, columns: cols, pattern: "independent" },
+    title: c.title,
+    ...Object.fromEntries(traces.map((_, i) => [
+      `scene${i}`,
+      { xaxis_title: c.x_label, yaxis_title: c.y_label, zaxis_title: dk,
+        camera: { eye: { x: 1.5, y: -1.5, z: 1.2 } } }
+    ])),
+    height: rows * 350,
+  };
+
+  const container = document.createElement("div");
+  container.className = "chart-card";
+  const divId = `plotly-${c.chart_id}`;
+  container.innerHTML = `<header><h3>${c.title}</h3><span class="muted small">每个策略一个3D曲面: X=${c.x_label} Y=${c.y_label} Z=${dk}</span></header><div id="${divId}"></div>`;
+  $("chart-grid").appendChild(container);
+  Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
 }
 
 // ═══════════════════════════════════════════════════════
