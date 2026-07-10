@@ -42,20 +42,22 @@ register_launch("pi_release", LaunchConfig(
 register_kpi("pi_release", KPISpec("baseline", "基线准确率", "accuracy", aggregate="first", fmt="pct"))
 register_kpi("pi_release", KPISpec("best_re", "最佳 RE", "re", aggregate="max", fmt=".3f", accent=True, exclude_g0=True))
 register_kpi("pi_release", KPISpec("avg_cp", "平均 CP", "cp", aggregate="mean", fmt="pct"))
+# 基础图表 (兼容旧数据 + 扫参)
 register_chart("pi_release", ChartSpec("acc_bar", "准确率按条件", "bar", data_key="accuracy"))
 register_chart("pi_release", ChartSpec("re_bar", "RE 按条件", "bar", data_key="re"))
-# 扫参图表: 多策略曲线 (x=updates, series=strategy, 位置固定2.5%)
-register_chart("pi_release", ChartSpec("sweep_line", "精度 vs updates (pos=2.5%)", "line-series",
+# 扫参图表: 多策略曲线 (仅扫参数据有效, 旧数据无 sweep 维度则跳过)
+register_chart("pi_release", ChartSpec("sweep_line", "扫参: 精度 vs updates (pos=2.5%)", "line-series",
     data_key="accuracy", series_key="strategy", x_key="updates", x_label="Updates", y_label="准确率"))
-# 扫参图表: 热力图 (x=updates, y=position, color=accuracy)
-register_chart("pi_release", ChartSpec("sweep_heat", "精度热力图 (updates × position)", "heatmap",
-    data_key="accuracy", x_key="updates", y_key="position", x_label="Updates", y_label="位置(尾部%)"))
-# 扫参图表: 3D曲面 (x=updates, y=position, z=accuracy, 每个策略一个子图)
-register_chart("pi_release", ChartSpec("sweep_3d", "3D曲面 (updates × position × 准确率)", "surface3d",
+register_chart("pi_release", ChartSpec("sweep_heat", "扫参: 精度热力图 (updates × position)", "heatmap",
+    data_key="accuracy", x_key="updates", y_key="position", x_label="Updates", y_label="位置"))
+register_chart("pi_release", ChartSpec("sweep_3d", "扫参: 3D曲面 (updates × position × accuracy)", "surface3d",
     data_key="accuracy", series_key="strategy", x_key="updates", y_key="position",
     x_label="Updates", y_label="位置"))
+# 表格列 (新旧兼容)
 register_column("pi_release", ColumnSpec("accuracy", "准确率", fmt="pct"))
 register_column("pi_release", ColumnSpec("re", "RE", fmt=".3f"))
+register_column("pi_release", ColumnSpec("cp", "CP", fmt="pct"))
+register_column("pi_release", ColumnSpec("robustness_delta", "鲁棒性Δ", fmt=".3f"))
 register_column("pi_release", ColumnSpec("updates", "Updates", fmt="d"))
 register_column("pi_release", ColumnSpec("n_calls", "调用数", fmt="d"))
 

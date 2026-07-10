@@ -234,15 +234,13 @@ function renderCharts(items) {
 }
 
 function renderLineSeries(c, items) {
-  // 按 series_key 分组, x_key 为 X 轴, data_key 为 Y 值
   const sk = c.series_key || "strategy";
   const xk = c.x_key || "updates";
   const dk = c.data_key || "accuracy";
 
-  // 解析 condition id, 提取 sweep 维度
   const parsed = items.map(g => ({ ...g, _p: _parseCondId(g.id) }));
-  // 过滤没有 sweep 元数据的项
   const valid = parsed.filter(g => g._p[xk] !== 0);
+  if (!valid.length) return;  // 非扫参数据, 跳过
 
   // 按 series 分组, 每组按 x 排序
   const groups = {};
@@ -283,13 +281,13 @@ function renderLineSeries(c, items) {
 }
 
 function renderHeatmap(c, items) {
-  // x=updates, y=position, color=accuracy
   const xk = c.x_key || "updates";
   const yk = c.y_key || "position";
   const dk = c.data_key || "accuracy";
 
   const parsed = items.map(g => ({ ...g, _p: _parseCondId(g.id) }));
   const valid = parsed.filter(g => g._p[xk] !== 0 && g._p[yk]);
+  if (!valid.length) return;
   const xs = [...new Set(valid.map(g => g._p[xk]))].sort((a,b) => a-b);
   const ys = [...new Set(valid.map(g => g._p[yk]))].sort();
 
@@ -316,7 +314,6 @@ function renderHeatmap(c, items) {
 }
 
 function renderSurface3D(c, items) {
-  // X=updates, Y=position, Z=data_key, 固定 strategy (从 options.strategy 取, 或自动选第一个)
   const xk = c.x_key || "updates";
   const yk = c.y_key || "position";
   const dk = c.data_key || "accuracy";
@@ -324,6 +321,7 @@ function renderSurface3D(c, items) {
 
   const parsed = items.map(g => ({ ...g, _p: _parseCondId(g.id) }));
   const valid = parsed.filter(g => g._p[xk] !== 0 && g._p[yk]);
+  if (!valid.length) return;
 
   // 按 strategy 分组, 每个策略一个曲面
   const byStrat = {};
