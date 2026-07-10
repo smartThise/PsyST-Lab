@@ -246,7 +246,14 @@ function renderCharts(items) {
       if (c.chart_type === "line-series") renderLineSeries(c, items);
       if (c.chart_type === "heatmap") renderHeatmap(c, items);
       if (c.chart_type === "surface3d") renderSurface3D(c, items);
-    } catch(e) { console.warn('chart render failed:', c.chart_id, e); }
+    } catch(e) {
+      console.error('chart render failed:', c.chart_id, e);
+      // 在页面上也显示错误
+      const errDiv = document.createElement("div");
+      errDiv.className = "chart-card";
+      errDiv.innerHTML = `<header><h3>${c.title}</h3></header><p class=\"muted small\" style=\"color:var(--red);padding:16px\">渲染失败: ${e.message}</p>`;
+      $("chart-grid").appendChild(errDiv);
+    }
   }
 }
 
@@ -330,6 +337,8 @@ function renderHeatmap(c, items) {
   $("chart-grid").appendChild(container);
 }
 
+function _uniqueVals(items, key) { return [...new Set(items.map(g => g._p[key]))].sort((a,b)=>a-b); }
+
 function renderSurface3D(c, items) {
   const xk = c.x_key || "updates";
   const yk = c.y_key || "position";
@@ -338,7 +347,17 @@ function renderSurface3D(c, items) {
 
   const parsed = items.map(g => ({ ...g, _p: _parseCondId(g.id) }));
   const valid = parsed.filter(g => g._p[xk] !== 0 && g._p[yk]);
-  if (!valid.length || typeof Plotly === "undefined") return;  // 无扫参数据或 Plotly 未加载, 不渲染空壳
+  if (!valid.length || typeof Plotly === "undefined") return;
+  const xs = _uniqueVals(valid, xk);
+  const ys = _uniqueVals(valid, yk);
+  // 3D 曲面至少需要 X≥2 且 Y≥2
+  if (xs.length < 2 || ys.length < 2) {
+    const container = document.createElement("div");
+    container.className = "chart-card";
+    container.innerHTML = `<header><h3>${c.title}</h3></header><p class=\"muted small\" style=\"padding:16px\">3D曲面需要X≥2且Y≥2维数据。当前Y=\"${yk}\"仅有${ys.length}个值(${ys.join(',')})。跑完位置扫描后自动激活。</p>`;
+    $("chart-grid").appendChild(container);
+    return;
+  }
 
   // 按 strategy 分组, 每个策略一个曲面
   const byStrat = {};
