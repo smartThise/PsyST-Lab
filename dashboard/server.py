@@ -276,15 +276,18 @@ def _force_stop(module_id: str = "") -> dict:
         except (ProcessLookupError, ValueError, PermissionError):
             pass
     deleted = None
-    if RUNS_DIR.exists():
-        subs = [d for d in RUNS_DIR.iterdir() if d.is_dir()]
-        if subs:
-            ld = max(subs, key=lambda d: d.stat().st_mtime)
-            incomplete = not (ld / "summary.json").exists()
-            if pids or incomplete:  # a run was in progress, or a partial folder lingers
-                shutil.rmtree(ld, ignore_errors=True)
-                deleted = ld.name
-    return {"ok": True, "killed": killed, "deleted": deleted}
+    if module_id and RUNS_DIR.exists():
+        mod_dir = RUNS_DIR / module_id
+        if mod_dir.is_dir():
+            # 找该模块下最新的 run 目录
+            run_dirs = [d for d in mod_dir.iterdir() if d.is_dir()]
+            if run_dirs:
+                ld = max(run_dirs, key=lambda d: d.stat().st_mtime)
+                incomplete = not (ld / "summary.json").exists()
+                if pids or incomplete:
+                    shutil.rmtree(ld, ignore_errors=True)
+                    deleted = str(ld.relative_to(RUNS_DIR))
+    return {"ok": True, "killed": killed, "deleted": deleted, "pids_found": len(runners)}
 
 
 # ----------------------------- compare -----------------------------
