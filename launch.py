@@ -48,6 +48,21 @@ def cmd_run(module_id: str, args: argparse.Namespace) -> None:
         print(f"未知模块 '{module_id}'。可用: {list(modules)}")
         sys.exit(1)
 
+    # 处理 --tasks-file (旧 drag 模式)
+    condition_filter = args.conditions or None
+    if args.tasks_file:
+        import json as _json
+        from pathlib import Path as _Path
+        tasks = _json.loads(_Path(args.tasks_file).read_text(encoding="utf-8"))
+        ids = set()
+        for t in tasks:
+            feats = t.get("features", [])
+            ids.add("+".join(feats) if feats else "G0")
+        condition_filter = list(ids)
+        # 删除 pending 文件
+        try: _Path(args.tasks_file).unlink()
+        except: pass
+
     mod = modules[module_id]
     runner = ExperimentRunner(mod)
 
@@ -65,7 +80,7 @@ def cmd_run(module_id: str, args: argparse.Namespace) -> None:
         if v: overrides[k] = v
 
     tag = runner.run(
-        condition_filter=args.conditions or None,
+        condition_filter=condition_filter,
         seed=args.seed,
         n_trials=args.trials,
         k_repeats=args.repeats,
@@ -107,6 +122,7 @@ def main() -> None:
     ap.add_argument("--updates-list", type=str, default="", help="PI sweep: 逗号分隔 updates 列表")
     ap.add_argument("--strategy", type=str, default="", help="PI sweep: A/C/A+C/逗号分隔策略")
     ap.add_argument("--positions", type=str, default="", help="PI sweep: 逗号分隔位置 (pct)")
+    ap.add_argument("--tasks-file", type=str, default="", help="旧 drag 模式: tasks JSON 文件")
     ap.add_argument("--dashboard", "-d", action="store_true", help="启动控制面板")
 
     args = ap.parse_args()
