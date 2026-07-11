@@ -264,29 +264,32 @@ def _status(module_id: str = "") -> dict:
 
 def _force_stop(module_id: str = "") -> dict:
     """Force-kill running launch.py for the given module, delete its newest incomplete run dir."""
-    runners = _find_runners()
+    try:
+        runners = _find_runners()
+    except Exception:
+        runners = []
     if module_id:
         runners = [r for r in runners if r["module_id"] == module_id]
-    pids = [r["pid"] for r in runners]
     killed = []
-    for pid in pids:
+    for r in runners:
         try:
-            subprocess.run(["kill", "-9", str(pid)], timeout=2)
-            killed.append(pid)
+            os.kill(int(r["pid"]), signal.SIGKILL)
+            killed.append(r["pid"])
         except Exception:
             pass
     deleted = None
-    if module_id and RUNS_DIR.exists():
-        mod_dir = RUNS_DIR / module_id
-        if mod_dir.is_dir():
-            # 找该模块下最新的 run 目录
-            run_dirs = [d for d in mod_dir.iterdir() if d.is_dir()]
-            if run_dirs:
-                ld = max(run_dirs, key=lambda d: d.stat().st_mtime)
-                incomplete = not (ld / "summary.json").exists()
-                if pids or incomplete:
-                    shutil.rmtree(ld, ignore_errors=True)
-                    deleted = str(ld.relative_to(RUNS_DIR))
+    try:
+        if module_id and RUNS_DIR.exists():
+            mod_dir = RUNS_DIR / module_id
+            if mod_dir.is_dir():
+                run_dirs = [d for d in mod_dir.iterdir() if d.is_dir()]
+                if run_dirs:
+                    ld = max(run_dirs, key=lambda d: d.stat().st_mtime)
+                    if not (ld / "summary.json").exists():
+                        shutil.rmtree(ld, ignore_errors=True)
+                        deleted = str(ld.relative_to(RUNS_DIR))
+    except Exception:
+        pass
     return {"ok": True, "killed": killed, "deleted": deleted, "pids_found": len(runners)}
 
 
