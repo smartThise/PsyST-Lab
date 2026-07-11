@@ -954,7 +954,7 @@ setInterval(async () => {
 
 $("force-stop-btn").onclick = async () => {
   if (!confirm("强制停止并删除当前 run?")) return;
-  try { const r = await api(`/api/force-stop?module=${selMod}`, { method: "POST" }); $("force-stop-msg").textContent = r.killed?.length ? `已停止 ${selMod}` : "无运行进程"; } catch (e) { }
+  try { const r = await api(`/api/force-stop?module=${selMod}`, { method: "POST" }); $("force-stop-msg").textContent = r.killed?.length ? `已停止 ${selMod}` : (r.error || "无运行进程"); } catch (e) { $("force-stop-msg").textContent = `错误:${e.message}`; }
 };
 
 let profiles = [];
