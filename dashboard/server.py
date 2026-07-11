@@ -535,9 +535,11 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/api/profiles":
             body = self._read_body()
             name = (body.get("name") or "").strip()
-            if not name or not body.get("base_url") or not body.get("api_key"):
-                self._send_json(400, {"ok": False, "error": "name / base_url / api_key 不能为空"})
+            if not name or not body.get("base_url"):
+                self._send_json(400, {"ok": False, "error": "name / base_url 不能为空"})
                 return
+            # api_key 可空 (本地 server 如 vLLM/demo-server 不需要 key)
+            api_key = (body.get("api_key") or "").strip()
             profiles = _load_profiles()
             profiles = [pp for pp in profiles if pp.get("name") != name]  # replace if exists
             # parse optional extra_body (YAML string -> dict), e.g. "thinking:\n  type: disabled"
@@ -556,7 +558,7 @@ class Handler(BaseHTTPRequestHandler):
             profiles.append({
                 "name": name,
                 "base_url": body["base_url"].strip(),
-                "api_key": body["api_key"].strip(),
+                "api_key": api_key,
                 "model": (body.get("model") or "").strip(),
                 "extra_body": extra_body,
             })

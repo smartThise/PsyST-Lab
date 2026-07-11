@@ -1,0 +1,11 @@
+# 本地 Qwen3.5-4B (PC) 测试配置
+base_url: http://192.168.31.208:8000/v1
+api_key: empty
+model: Qwen/Qwen3.5-4B
+temperature: 0.0
+max_tokens: 1024
+max_retries: 3
+timeout: 120
+extra_body:
+  chat_template_kwargs:
+    enable_thinking: false
