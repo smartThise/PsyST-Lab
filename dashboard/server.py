@@ -263,20 +263,19 @@ def _status(module_id: str = "") -> dict:
 
 
 def _force_stop(module_id: str = "") -> dict:
-    """Force-kill running launch.py for the given module, delete its newest incomplete run dir."""
-    try:
-        runners = _find_runners()
-    except Exception:
-        runners = []
-    if module_id:
-        runners = [r for r in runners if r["module_id"] == module_id]
+    """Force-kill 该模块的实验进程 (从 PID 文件读, 不猜 ps)."""
     killed = []
-    for r in runners:
+    # 读 PID 文件
+    pid_file = RUNS_DIR / f".pid_{module_id}" if module_id else None
+    if pid_file and pid_file.exists():
         try:
-            os.kill(int(r["pid"]), signal.SIGKILL)
-            killed.append(r["pid"])
+            pid = int(pid_file.read_text().strip())
+            os.kill(pid, signal.SIGKILL)
+            killed.append(str(pid))
+            pid_file.unlink()
         except Exception:
             pass
+    # 删除最新未完成的 run
     deleted = None
     try:
         if module_id and RUNS_DIR.exists():
@@ -290,7 +289,7 @@ def _force_stop(module_id: str = "") -> dict:
                         deleted = str(ld.relative_to(RUNS_DIR))
     except Exception:
         pass
-    return {"ok": True, "killed": killed, "deleted": deleted, "pids_found": len(runners)}
+    return {"ok": True, "killed": killed, "deleted": deleted}
 
 
 # ----------------------------- compare -----------------------------
@@ -462,9 +461,13 @@ def _launch(body: dict) -> dict:
             except (ValueError, TypeError):
                 pass
 
-    subprocess.Popen(
+    proc = subprocess.Popen(
         args, cwd=str(ROOT), start_new_session=True,
     )
+    # 记 PID 到文件 (供 force stop 精准 kill)
+    pid_file = RUNS_DIR / f".pid_{module_id}"
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    pid_file.write_text(str(proc.pid))
     return {"launched": True, "profile": profile.get("name"),
             "model": profile.get("model"), "module_id": module_id,
             "conditions": conditions}
