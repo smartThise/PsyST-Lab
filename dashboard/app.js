@@ -448,6 +448,9 @@ function renderGroupedBarGrid(c, items) {
   const parsed = items.map(g => ({ ...g, _p: _parseCondId(g.id) }));
   const valid = parsed.filter(g => g._p.updates !== 0);
   if (!valid.length) return;
+  // 横轴值 <2 个 (如 batch1 只单位置) 不渲染柱状图
+  const xvals = [...new Set(valid.map(g => g._p[xk]))];
+  if (xvals.length < 2) return;
 
   // 按 split_key 分组
   const splits = {};
