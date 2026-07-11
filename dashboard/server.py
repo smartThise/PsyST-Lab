@@ -419,11 +419,18 @@ def _launch(body: dict) -> dict:
 
     conditions = body.get("conditions", [])
     is_sweep = bool(body.get("updates_list", ""))
-    if not is_sweep and not conditions:
+    has_tasks = bool(body.get("tasks"))
+    if not is_sweep and not has_tasks and not conditions:
         return {"launched": False, "error": "no conditions selected"}
 
     args = [py, str(ROOT / "launch.py"), "--module", module_id]
-    if conditions:
+    tasks = body.get("tasks")
+    if tasks:
+        tasks_file = ROOT / "runs" / ".tasks_pending.json"
+        tasks_file.parent.mkdir(parents=True, exist_ok=True)
+        tasks_file.write_text(json.dumps(tasks), encoding="utf-8")
+        args += ["--tasks-file", str(tasks_file)]
+    elif conditions:
         args += ["--conditions"] + conditions
 
     if profile.get("model"):
