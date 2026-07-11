@@ -236,14 +236,20 @@ function renderCharts(items) {
   Object.values(charts).forEach(c => c?.destroy()); charts = {};
   const sorted = multiSort(items);
   const chartSpecs = (spec.charts || []).filter(c => c.chart_type !== "kpi" && c.chart_type !== "table");
-  const basicSpecs = chartSpecs.filter(c => c.chart_type !== "line-series" && c.chart_type !== "heatmap");
+  const basicSpecs = chartSpecs.filter(c => !["line-series","line-series-grid","heatmap","surface3d","grouped-bar-grid"].includes(c.chart_type));
   const advSpecs = chartSpecs.filter(c => ["line-series","line-series-grid","heatmap","surface3d","grouped-bar-grid"].includes(c.chart_type));
 
   // 清空容器
   $("sweep-charts").innerHTML = "";
-  // 基础图表 (bar, scatter) canvas 容器
-  $("chart-grid").innerHTML = basicSpecs.map(c =>
-    `<div class="chart-card"><header><h3>${c.title}</h3><span class="sort-hint" onclick="toggleSort('${c.data_key}');return false">按${c.data_key}排序</span></header><canvas id="ch-${c.chart_id}" height="120"></canvas></div>`
+  $("chart-grid").innerHTML = "";
+
+  // sweep 数据跳过 basic bar chart (无意义)
+  const isSweep = items.length > 10 && items.some(g => g.updates != null);
+  const visibleBasic = isSweep ? [] : basicSpecs;
+
+  // 只为真正要渲染的 basic chart 创建容器
+  $("chart-grid").innerHTML = visibleBasic.map(c =>
+    `<div class="chart-card"><header><h3>${c.title}</h3></header><canvas id="ch-${c.chart_id}" height="120"></canvas></div>`
   ).join("");
 
   const labels = sorted.map(g => g.id);
@@ -254,10 +260,7 @@ function renderCharts(items) {
   };
   const legend = { labels: { color: "#424a53", font: { size: 12 }, boxWidth: 12, boxHeight: 12 } };
 
-  // sweep 数据 (>多个 condition 含 updates 维度) 跳过 basic bar chart, 只看 line-series/heatmap
-  const isSweep = items.length > 10 && items.some(g => g.updates != null);
-  for (const c of basicSpecs) {
-    if (isSweep) continue;  // sweep数据bar图无意义
+  for (const c of visibleBasic) {
     const ctx = $(`ch-${c.chart_id}`); if (!ctx) continue;
     const vals = sorted.map(g => g[c.data_key] ?? 0);
     const ds = [{
@@ -521,14 +524,8 @@ function renderSurface3D(c, items) {
   if (!valid.length || typeof Plotly === "undefined") return;
   const xs = _uniqueVals(valid, xk);
   const ys = _uniqueVals(valid, yk);
-  // 3D 曲面至少需要 X≥2 且 Y≥2
-  if (xs.length < 2 || ys.length < 2) {
-    const container = document.createElement("div");
-    container.className = "chart-card";
-    container.innerHTML = `<header><h3>${c.title}</h3></header><p class=\"muted small\" style=\"padding:16px\">3D曲面需要X≥2且Y≥2维数据。当前Y=\"${yk}\"仅有${ys.length}个值(${ys.join(',')})。跑完位置扫描后自动激活。</p>`;
-    $("sweep-charts").appendChild(container);
-    return;
-  }
+  // 3D 曲面至少需要 X≥2 且 Y≥2, 否则静默跳过 (不留空壳)
+  if (xs.length < 2 || ys.length < 2) return;
 
   // 所有策略叠加在一个 3D 场景, 用不同颜色区分
   const byStrat = {};
