@@ -572,6 +572,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802
         p = urlparse(self.path).path
+        qs = parse_qs(urlparse(self.path).query)
         if p == "/api/launch":
             self._send_json(200, _launch(self._read_body()))
         elif p == "/api/force-stop":
