@@ -150,6 +150,11 @@ class ExperimentRunner:
                         response = self.client.chat(task.messages, temperature=temp, max_tokens=mtok)
 
                     result = self.module.score(task, response)
+                    # 记入本地 server 返回的机制数据 ID
+                    aid = self.client.last_extra.get("x_activation_id", "")
+                    if aid:
+                        result.raw["activation_id"] = aid
+                        result.scores["activation_id"] = aid
                     done += 1
 
                     # 逐条件进度日志

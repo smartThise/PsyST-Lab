@@ -318,6 +318,16 @@ def _compare(tags: list[str]) -> dict:
 
 # ----------------------------- API profiles -----------------------------
 
+def _get_mechanism_url() -> str:
+    """从 profiles 里找本地服务器的 URL (去掉 /v1)."""
+    profiles = _load_profiles()
+    for p in profiles:
+        bu = p.get("base_url", "")
+        if "192.168" in bu or "localhost" in bu or "127.0.0.1" in bu:
+            return bu.rstrip("/v1")
+    return ""
+
+
 def _mask_key(k: str) -> str:
     k = str(k or "")
     if len(k) <= 8:
@@ -497,6 +507,20 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/api/status":
             mid = qs.get("module", [""])[0]
             self._send_json(200, _status(mid))
+        elif p.startswith("/api/mechanism/"):
+            # 代理到 PC demo-server
+            path = p[len("/api/mechanism/"):]
+            mech_url = _get_mechanism_url()
+            if not mech_url:
+                self._send_json(503, {"error": "没有配置本地机制服务器(profile base_url 不含 192.168)"})
+                return
+            query = "?" + parsed.path.split("?")[1] if "?" in self.path else ""
+            try:
+                import urllib.request as _req
+                resp = _req.urlopen(f"{mech_url}/mechanism/{path}{query}", timeout=10)
+                self._send_json(200, json.loads(resp.read()))
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
         elif p == "/api/modules":
             self._send_json(200, _list_mods())
         elif p.startswith("/api/spec/"):

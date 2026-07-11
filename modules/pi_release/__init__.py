@@ -56,6 +56,11 @@ register_chart("pi_release", ChartSpec("sweep_3d", "3D 曲面 (updates × positi
 register_chart("pi_release", ChartSpec("sweep_bars", "柱状图 (位置×策略, 按updates分组)", "grouped-bar-grid",
     data_key="accuracy", series_key="strategy", x_key="position", split_key="updates",
     x_label="位置", y_label="准确率"))
+# 机制图表 (有 activation_id 时自动渲染, 无数据时静默跳过)
+register_chart("pi_release", ChartSpec("mech_norm", "激活范数 (per-layer)", "mech-bars",
+    data_key="activation_id"))
+register_chart("pi_release", ChartSpec("mech_diff", "激活差异 (前两个条件对比)", "mech-compare",
+    data_key="activation_id"))
 # 表格列 (新旧兼容)
 register_column("pi_release", ColumnSpec("accuracy", "准确率", fmt="pct"))
 register_column("pi_release", ColumnSpec("re", "RE", fmt=".3f"))

@@ -236,8 +236,8 @@ function renderCharts(items) {
   Object.values(charts).forEach(c => c?.destroy()); charts = {};
   const sorted = multiSort(items);
   const chartSpecs = (spec.charts || []).filter(c => c.chart_type !== "kpi" && c.chart_type !== "table");
-  const basicSpecs = chartSpecs.filter(c => !["line-series","line-series-grid","heatmap","surface3d","grouped-bar-grid"].includes(c.chart_type));
-  const advSpecs = chartSpecs.filter(c => ["line-series","line-series-grid","heatmap","surface3d","grouped-bar-grid"].includes(c.chart_type));
+  const basicSpecs = chartSpecs.filter(c => !["line-series","line-series-grid","heatmap","surface3d","grouped-bar-grid","mech-bars","mech-compare"].includes(c.chart_type));
+  const advSpecs = chartSpecs.filter(c => ["line-series","line-series-grid","heatmap","surface3d","grouped-bar-grid","mech-bars","mech-compare"].includes(c.chart_type));
 
   // 清空容器
   $("sweep-charts").innerHTML = "";
@@ -282,6 +282,8 @@ function renderCharts(items) {
       if (c.chart_type === "heatmap") renderHeatmap(c, items);
       if (c.chart_type === "surface3d") renderSurface3D(c, items);
       if (c.chart_type === "grouped-bar-grid") renderGroupedBarGrid(c, items);
+      if (c.chart_type === "mech-bars") renderMechBars(c, items);
+      if (c.chart_type === "mech-compare") renderMechCompare(c, items);
     } catch(e) {
       console.error('chart render failed:', c.chart_id, e);
       // 在页面上也显示错误
@@ -573,6 +575,83 @@ function renderSurface3D(c, items) {
   container.innerHTML = `<header><h3>${c.title}</h3><span class="muted small">X=${c.x_label||xk} Y=${c.y_label||yk} Z=${dk}, 颜色=策略</span></header><div id="${divId}"></div>`;
   $("sweep-charts").appendChild(container);
   Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: true });
+
+async function renderMechBars(c, items) {
+  // 找第一个有 activation_id 的条件
+  const aid = _findMechId(items);
+  if (!aid) return;
+  const data = await api(`/api/mechanism/${aid}`);
+  if (data.error || !data.layers) return;
+
+  const layers = data.layers;
+  const container = document.createElement("div");
+  container.className = "chart-card";
+  container.innerHTML = `<header><h3>${c.title}</h3><span class="muted small">${data.response || ""}</span></header><canvas id="ch-${c.chart_id}" height="120"></canvas>`;
+  $("sweep-charts").appendChild(container);
+  const ctx = $(`ch-${c.chart_id}`); if (!ctx) return;
+  charts[c.chart_id] = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: layers.map(l => `L${l.layer}`),
+      datasets: [{ label: "activation norm", data: layers.map(l => l.norm),
+        backgroundColor: layers.map((_, i) => `hsl(${260-i*8},50%,55%)`), borderRadius: 2 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: "#57606a", font: { size: 9 } } }, y: { ticks: { color: "#57606a" } } }
+    }
+  });
+}
+
+async function renderMechCompare(c, items) {
+  const ids = _findMechIds(items, 2);
+  if (ids.length < 2) return;
+  const data = await api(`/api/mechanism/compare?a=${ids[0]}&b=${ids[1]}`);
+  if (data.error || !data.diffs) return;
+
+  const container = document.createElement("div");
+  container.className = "chart-card";
+  container.innerHTML = `<header><h3>${c.title}</h3><span class="muted small">diff norm</span></header><canvas id="ch-${c.chart_id}" height="120"></canvas>`;
+  $("sweep-charts").appendChild(container);
+  const ctx = $(`ch-${c.chart_id}`); if (!ctx) return;
+
+  const diffs = data.diffs;
+  charts[c.chart_id] = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: diffs.map(d => `L${d.layer}`),
+      datasets: [{ label: "||G8s - G0||", data: diffs.map(d => d.diff_norm),
+        backgroundColor: diffs.map(d => d.diff_norm > diffs.reduce((a,b)=>a+b.diff_norm,0)/diffs.length ? "#cf222e44" : "#0969da22"),
+        borderColor: diffs.map(d => d.diff_norm > diffs.reduce((a,b)=>a+b.diff_norm,0)/diffs.length ? "#cf222e" : "#0969da"),
+        borderWidth: 1.5, borderRadius: 2 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: "#57606a", font: { size: 9 } } }, y: { ticks: { color: "#57606a" } } }
+    }
+  });
+}
+
+function _findMechId(items) {
+  for (const g of items) {
+    const raw = g._raw || {};
+    if (raw.activation_id) return raw.activation_id;
+    // also check if activation_id is in scores
+    if (g.activation_id) return g.activation_id;
+  }
+  return "";
+}
+function _findMechIds(items, n) {
+  const ids = [];
+  for (const g of items) {
+    if (g._raw?.activation_id) ids.push(g._raw.activation_id);
+    if (g.activation_id) ids.push(g.activation_id);
+    if (ids.length >= n) break;
+  }
+  return ids;
+}
 }
 
 // ═══════════════════════════════════════════════════════

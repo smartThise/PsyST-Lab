@@ -31,6 +31,7 @@ class APIClient:
         self.max_retries = max_retries
         self.timeout = timeout
         self.extra_body = extra_body or {}
+        self.last_extra: dict[str, Any] = {}  # 上次 API 调用的 x_* 字段
 
     def chat(
         self,
@@ -73,6 +74,8 @@ class APIClient:
                     raise APIError(f"HTTP {resp.status_code}: {resp.text[:200]}")
                 resp.raise_for_status()
                 data = resp.json()
+                # 捕获本地 server 返回的机制数据 ID
+                self.last_extra = {k: v for k, v in data.items() if k.startswith("x_")}
                 return data["choices"][0]["message"]["content"].strip()
             except Exception as exc:
                 last_exc = exc
