@@ -271,9 +271,9 @@ def _force_stop(module_id: str = "") -> dict:
     killed = []
     for pid in pids:
         try:
-            os.kill(int(pid), signal.SIGKILL)
+            subprocess.run(["kill", "-9", str(pid)], timeout=2)
             killed.append(pid)
-        except (ProcessLookupError, ValueError, PermissionError):
+        except Exception:
             pass
     deleted = None
     if module_id and RUNS_DIR.exists():
@@ -565,7 +565,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, _launch(self._read_body()))
         elif p == "/api/force-stop":
             mid = qs.get("module", [""])[0]
-            self._send_json(200, _force_stop(mid))
+            try:
+                result = _force_stop(mid)
+                self._send_json(200, result)
+            except Exception as e:
+                self._send_json(500, {"ok": False, "error": str(e)})
         elif p == "/api/profiles":
             body = self._read_body()
             name = (body.get("name") or "").strip()
