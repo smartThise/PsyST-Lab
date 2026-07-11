@@ -414,10 +414,15 @@ def _apply_profile_to_config(profile: dict) -> None:
 
 def _launch(body: dict) -> dict:
     module_id = body.get("module_id", "pi_release")
-    runners = _find_runners()
-    same_mod = [r for r in runners if r["module_id"] == module_id]
-    if same_mod:
-        return {"launched": False, "error": f"模块 {module_id} 已有 run 在跑,等它结束. 其他模块可并行."}
+    # 检查 PID 文件: 该模块是否已有实验在跑
+    pid_file = RUNS_DIR / f".pid_{module_id}"
+    if pid_file.exists():
+        try:
+            pid = int(pid_file.read_text().strip())
+            os.kill(pid, 0)  # signal 0 = 只检查进程是否存在
+            return {"launched": False, "error": f"模块 {module_id} 已有 run 在跑(PID={pid}),等它结束. 其他模块可并行."}
+        except OSError:
+            pid_file.unlink()  # 进程已死, 清理残留 PID 文件
 
     # resolve profile -> write into config.yaml
     profiles = _load_profiles()
