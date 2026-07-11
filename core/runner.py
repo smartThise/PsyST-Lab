@@ -227,6 +227,7 @@ class ExperimentRunner:
             "module_id": self.module.module_id,
             "module_name": self.module.module_name,
             "tag": self._tag,
+            "model": self.config.get("model", "?"),
             "conditions": aggregated,
             "n_trials": n_trials,
             "k_repeats": k_repeats,
