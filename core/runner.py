@@ -136,18 +136,19 @@ class ExperimentRunner:
 
         for i, cond in enumerate(conditions):
             for trial in range(n_trials):
-                task = self.module.build_task(cond, seed + i * 1000 + trial)
+                try:
+                    task = self.module.build_task(cond, seed + i * 1000 + trial)
 
-                for rep in range(k_repeats):
-                    temp = task.overrides.get("temperature", self.client.temperature)
-                    mtok = task.overrides.get("max_tokens", self.client.max_tokens)
+                    for rep in range(k_repeats):
+                        temp = task.overrides.get("temperature", self.client.temperature)
+                        mtok = task.overrides.get("max_tokens", self.client.max_tokens)
 
-                    # --- 多轮对话 ---
-                    if task.metadata.get("multi_turn"):
-                        response, turn_log = self._run_multi_turn(task, temp, mtok)
-                        task.metadata["turn_log"] = turn_log
-                    else:
-                        response = self.client.chat(task.messages, temperature=temp, max_tokens=mtok)
+                        # --- 多轮对话 ---
+                        if task.metadata.get("multi_turn"):
+                            response, turn_log = self._run_multi_turn(task, temp, mtok)
+                            task.metadata["turn_log"] = turn_log
+                        else:
+                            response = self.client.chat(task.messages, temperature=temp, max_tokens=mtok)
 
                     result = self.module.score(task, response)
                     # 记入本地 server 返回的机制数据 ID
@@ -179,7 +180,11 @@ class ExperimentRunner:
                     if progress_callback:
                         progress_callback(done, total, cond.id)
 
-                    time.sleep(0.05)  # 温和限流
+                except Exception as exc:
+                    self._log(f"  [ERROR] {cond.name}: {exc}")
+                    done += 1
+
+                time.sleep(0.05)  # 温和限流
 
         self.module.post_run(all_results)
 
