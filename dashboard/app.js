@@ -575,6 +575,7 @@ function renderSurface3D(c, items) {
   container.innerHTML = `<header><h3>${c.title}</h3><span class="muted small">X=${c.x_label||xk} Y=${c.y_label||yk} Z=${dk}, 颜色=策略</span></header><div id="${divId}"></div>`;
   $("sweep-charts").appendChild(container);
   Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: true });
+}
 
 async function renderMechBars(c, items) {
   // 找第一个有 activation_id 的条件
@@ -651,7 +652,6 @@ function _findMechIds(items, n) {
     if (ids.length >= n) break;
   }
   return ids;
-}
 }
 
 // ═══════════════════════════════════════════════════════
