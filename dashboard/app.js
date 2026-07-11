@@ -606,15 +606,20 @@ async function renderLaunch() {
   const desc = spec.launch?.description || "";
   const descEl = $("launch-desc"); if (descEl) descEl.textContent = desc;
 
-  // 隐藏 PI-specific 旧字段, 渲染泛用 extra_params
+  // Profile dropdown (放最前面, 不被 extra_params 覆盖)
+  try {
+    const profs = (await api("/api/profiles")).profiles || [];
+    const sel = $("f-profile"); if (sel) sel.innerHTML = profs.map(p => `<option>${p.name}</option>`).join("");
+  } catch (e) { }
+
+  // 渲染泛用 extra_params (保留 f-profile select 不受影响)
   const formGrid = document.querySelector(".form-grid-5");
-  if (formGrid) formGrid.innerHTML = extra.map(p => {
+  if (formGrid) formGrid.innerHTML = `<label>API 配置<select id="f-profile"></select></label>` + extra.map(p => {
     const itype = p.type === "str" ? "text" : "number";
     const def = p.default != null ? p.default : (itype === "number" ? 1 : "");
     return `<label>${p.label}<input id="f-${p.key}" type="${itype}" value="${def}"></label>`;
   }).join("");
-
-  // Profile dropdown
+  // 重新填充(因为上面的 innerHTML 把它删了重建)
   try {
     const profs = (await api("/api/profiles")).profiles || [];
     const sel = $("f-profile"); if (sel) sel.innerHTML = profs.map(p => `<option>${p.name}</option>`).join("");
