@@ -213,50 +213,67 @@ def _status(module_id: str = "") -> dict:
     # 读最新 run 的日志和进度
     log_tail = ""
     latest_tag, latest_module, records, total = None, "", 0, None
-    # 优先用当前运行实验的数据 (PID 文件存在时)
-    active_run_dir = None
+    # 优先用当前运行实验的数据 (PID 文件存在且进程活着)
+    active_dir = None
     if module_id:
         pid_file = RUNS_DIR / f".pid_{module_id}"
         if pid_file.exists():
             try:
+                pid = int(pid_file.read_text().strip())
+                os.kill(pid, 0)  # 检查进程存在
                 mod_dir = RUNS_DIR / module_id
                 if mod_dir.is_dir():
-                    run_dirs = [d for d in mod_dir.iterdir() if d.is_dir()]
-                    if run_dirs:
-                        active_run_dir = max(run_dirs, key=lambda d: d.stat().st_mtime)
-            except Exception: pass
+                    runs = [d for d in mod_dir.iterdir() if d.is_dir()]
+                    if runs:
+                        active_dir = max(runs, key=lambda d: d.stat().st_mtime)
+            except OSError:
+                pass  # 进程不存在, 清理
     if RUNS_DIR.exists():
-        best_mtime = 0
-        for mod_dir in RUNS_DIR.iterdir():
-            if not mod_dir.is_dir() or mod_dir.name.startswith("."):
-                continue
-            if module_id and mod_dir.name != module_id:
-                continue
-            for run_dir in mod_dir.iterdir():
-                if not run_dir.is_dir():
+        # 如果有活跃实验, 只看那个目录
+        if active_dir:
+            latest_tag, latest_module = active_dir.name, module_id
+            rf = active_dir / "results.jsonl"
+            if rf.exists():
+                records = sum(1 for _ in open(rf, "r", encoding="utf-8"))
+            try:
+                rc = json.loads((active_dir / "run_config.json").read_text(encoding="utf-8"))
+                total = rc.get("planned_total")
+            except Exception: pass
+            lf = active_dir / "run.log"
+            if lf.exists():
+                try:
+                    lines = lf.read_text(encoding="utf-8", errors="replace").splitlines()
+                    log_tail = "\n".join(lines[-40:])
+                except Exception: pass
+        else:
+            best_mtime = 0
+            for mod_dir in RUNS_DIR.iterdir():
+                if not mod_dir.is_dir() or mod_dir.name.startswith("."):
                     continue
-                # 优先用活跃 run
-                if active_run_dir and run_dir != active_run_dir:
-                    pass  # still scan for mtime if no active match
-                mt = run_dir.stat().st_mtime
-                if mt > best_mtime or run_dir == active_run_dir:
-                    best_mtime = mt
-                    latest_tag = run_dir.name
-                    latest_module = mod_dir.name
-                    # 读 run.log
-                    lf = run_dir / "run.log"
-                    if lf.exists():
+                if module_id and mod_dir.name != module_id:
+                    continue
+                for run_dir in mod_dir.iterdir():
+                    if not run_dir.is_dir():
+                        continue
+                    mt = run_dir.stat().st_mtime
+                    if mt > best_mtime:
+                        best_mtime = mt
+                        latest_tag = run_dir.name
+                        latest_module = mod_dir.name
+                        # 读 run.log
+                        lf = run_dir / "run.log"
+                        if lf.exists():
+                            try:
+                                lines = lf.read_text(encoding="utf-8", errors="replace").splitlines()
+                                log_tail = "\n".join(lines[-40:])
+                            except Exception: pass
+                        rf = run_dir / "results.jsonl"
+                        if rf.exists():
+                            records = sum(1 for _ in open(rf, "r", encoding="utf-8"))
                         try:
-                            lines = lf.read_text(encoding="utf-8", errors="replace").splitlines()
-                            log_tail = "\n".join(lines[-40:])
+                            rc = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
+                            total = rc.get("planned_total")
                         except Exception: pass
-                    rf = run_dir / "results.jsonl"
-                    if rf.exists():
-                        records = sum(1 for _ in open(rf, "r", encoding="utf-8"))
-                    try:
-                        rc = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
-                        total = rc.get("planned_total")
-                    except Exception: pass
 
     current_group = None
     for line in reversed(log_tail.splitlines()):
