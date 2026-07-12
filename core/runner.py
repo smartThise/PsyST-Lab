@@ -149,34 +149,31 @@ class ExperimentRunner:
                         else:
                             response = self.client.chat(task.messages, temperature=temp, max_tokens=mtok)
 
-                    result = self.module.score(task, response)
-                    # 记入本地 server 返回的机制数据 ID
-                    aid = self.client.last_extra.get("x_activation_id", "")
-                    if aid:
-                        result.raw["activation_id"] = aid
-                    done += 1
+                        result = self.module.score(task, response)
+                        aid = self.client.last_extra.get("x_activation_id", "")
+                        if aid:
+                            result.raw["activation_id"] = aid
+                        done += 1
 
-                    # 逐条件进度日志
-                    scores_str = " ".join(f"{k}={v:.3f}" if isinstance(v, float) else f"{k}={v}"
-                                          for k, v in list(result.scores.items())[:5])
-                    self._log(f"  [{done}/{total}] {result.condition_id}: {scores_str}")
+                        scores_str = " ".join(f"{k}={v:.3f}" if isinstance(v, float) else f"{k}={v}"
+                                              for k, v in list(result.scores.items())[:5])
+                        self._log(f"  [{done}/{total}] {result.condition_id}: {scores_str}")
 
-                    # 写入结果 (含多轮日志)
-                    record = {
-                        "module_id": self.module.module_id,
-                        "condition_id": result.condition_id,
-                        "trial": trial,
-                        "repeat": rep,
-                        "scores": result.scores,
-                        "raw": result.raw,
-                    }
-                    if task.metadata.get("turn_log"):
-                        record["turn_log"] = task.metadata["turn_log"]
-                    append_jsonl(self._run_dir / "results.jsonl", record)
-                    all_results.append(result)
+                        record = {
+                            "module_id": self.module.module_id,
+                            "condition_id": result.condition_id,
+                            "trial": trial,
+                            "repeat": rep,
+                            "scores": result.scores,
+                            "raw": result.raw,
+                        }
+                        if task.metadata.get("turn_log"):
+                            record["turn_log"] = task.metadata["turn_log"]
+                        append_jsonl(self._run_dir / "results.jsonl", record)
+                        all_results.append(result)
 
-                    if progress_callback:
-                        progress_callback(done, total, cond.id)
+                        if progress_callback:
+                            progress_callback(done, total, cond.id)
 
                 except Exception as exc:
                     self._log(f"  [ERROR] {cond.name}: {exc}")
