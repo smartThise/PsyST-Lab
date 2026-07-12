@@ -154,7 +154,6 @@ class ExperimentRunner:
                     aid = self.client.last_extra.get("x_activation_id", "")
                     if aid:
                         result.raw["activation_id"] = aid
-                        result.scores["activation_id"] = aid
                     done += 1
 
                     # 逐条件进度日志
@@ -224,9 +223,9 @@ class ExperimentRunner:
             avg = {}
             for k in sorted(keys):
                 vals = [s[k] for s in scores_list if s.get(k) is not None]
-                if vals:
+                if vals and isinstance(vals[0], (int, float)):
                     v = sum(vals) / len(vals)
-            avg[k] = v if v == v else None  # filter NaN
+                    avg[k] = v if v == v else None
             avg["n"] = len(scores_list)
             avg["condition_id"] = cond.id
             avg["condition_name"] = cond.name
