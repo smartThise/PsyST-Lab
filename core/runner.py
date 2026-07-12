@@ -21,7 +21,6 @@ class ExperimentRunner:
     def __init__(self, module: BaseModule):
         self.module = module
         self.config = load_config()
-        self.module.setup(self.config)
         self.client = self._build_client()
         self._run_dir: Path | None = None
         self._tag: str = ""
@@ -89,8 +88,8 @@ class ExperimentRunner:
         if overrides:
             for k, v in overrides.items():
                 self.config[k] = v
-            self.module.setup(self.config)  # re-apply config so module sees overrides
             self.client = self._build_client(overrides)
+        self.module.setup(self.config)  # 始终 setup, 确保模块读到最新 config
 
         conditions = self.module.build_conditions()
         if condition_filter:
