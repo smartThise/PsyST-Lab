@@ -489,8 +489,8 @@ def _launch(body: dict) -> dict:
         args += ["--model", str(profile["model"])]
     _STR_ARGS = {"updates_list", "strategy", "positions"}
     for key, cli in [("n_trials", "--trials"), ("k_repeats", "--repeats"), ("seed", "--seed"),
-                     ("n_back", "--n-back"), ("updates_list", "--updates-list"),
-                     ("strategy", "--strategy"), ("positions", "--positions")]:
+                     ("n_back", "--n-back"), ("n_keys", "--n-keys"), ("updates_per_key", "--updates-per-key"),
+                     ("updates_list", "--updates-list"), ("strategy", "--strategy"), ("positions", "--positions")]:
         v = body.get(key)
         if v is not None and v != "":
             try:

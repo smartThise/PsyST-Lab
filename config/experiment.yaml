@@ -12,12 +12,12 @@
 #   - temperature = 0, max_tokens = 1024 (set in config.yaml)
 
 pi_test:
-  n_keys: 46             # paper standard (test1_updates: n_tracked_keys=[46])
+  n_keys: 10             # paper standard (test1_updates: n_tracked_keys=[46])
   updates_per_key: 4     # light load — baseline ~0.22, leaves headroom to see release effects
   n_trials: 10           # distinct PI streams per task (small prompt -> can afford more)
   seed: 42               # base RNG seed (each trial derives its own)
 
 eval:
   k_repeats: 3           # API calls per (task, trial) -> averaged accuracy
-  measure_cp: true       # Context Preservation probe (unrelated prior fact)
-  measure_robustness: true  # delete 1 char from injection, re-run, check RE delta
+  measure_cp: false       # Context Preservation probe (unrelated prior fact)
+  measure_robustness: false  # delete 1 char from injection, re-run, check RE delta

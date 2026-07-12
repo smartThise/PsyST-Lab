@@ -75,6 +75,8 @@ def cmd_run(module_id: str, args: argparse.Namespace) -> None:
     if args.model: overrides["model"] = args.model
     if args.temperature is not None: overrides["temperature"] = args.temperature
     if getattr(args, "n_back", None) is not None: overrides["n_back"] = args.n_back
+    if getattr(args, "n_keys", None) is not None: overrides["n_keys"] = args.n_keys
+    if getattr(args, "updates_per_key", None) is not None: overrides["updates_per_key"] = args.updates_per_key
     for k in ("updates_list", "strategy", "positions"):
         v = getattr(args, k, "") or ""
         if v: overrides[k] = v
@@ -119,6 +121,8 @@ def main() -> None:
     ap.add_argument("--trials", type=int, default=1, help="每个条件的 trial 数")
     ap.add_argument("--repeats", "-k", type=int, default=1, help="每个 trial 的重复次数")
     ap.add_argument("--n-back", type=int, default=2, help="n-back 值 (1-6, recall_rating 模块)")
+    ap.add_argument("--n-keys", type=int, default=None, help="PI: tracked keys 数")
+    ap.add_argument("--updates-per-key", type=int, default=None, help="PI: 每个 key 的更新次数")
     ap.add_argument("--updates-list", type=str, default="", help="PI sweep: 逗号分隔 updates 列表")
     ap.add_argument("--strategy", type=str, default="", help="PI sweep: A/C/A+C/逗号分隔策略")
     ap.add_argument("--positions", type=str, default="", help="PI sweep: 逗号分隔位置 (pct)")

@@ -82,7 +82,7 @@ class PIModule(BaseModule):
         super().setup(config)
         exp = load_yaml(Path(__file__).resolve().parent.parent.parent / "config" / "experiment.yaml")
         pi_cfg = exp.get("pi_test", {}); eval_cfg = exp.get("eval", {})
-        self.n_keys = int(pi_cfg.get("n_keys", 46))
+        self.n_keys = int(config.get("n_keys") or pi_cfg.get("n_keys", 46))
         self.n_trials = int(pi_cfg.get("n_trials", 10))
         self.k_repeats = int(eval_cfg.get("k_repeats", 3))
         self.base_seed = int(pi_cfg.get("seed", 42))
